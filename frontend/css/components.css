@@ -1,0 +1,388 @@
+/* ==========================================================================
+   NavPort · Components — flat, hairline-bordered, one accent
+   ========================================================================== */
+
+/* ---- Buttons ------------------------------------------------------------- */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s2);
+    height: 34px;
+    padding: 0 var(--s3);
+    border-radius: var(--r);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+
+.btn:hover { background: var(--surface-2); border-color: #D8D6D1; }
+.btn:disabled { opacity: .55; pointer-events: none; }
+
+.btn--primary {
+    height: 38px;
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--paper);
+    font-weight: 600;
+}
+
+.btn--primary:hover { background: var(--ink-2); border-color: var(--ink-2); }
+
+.btn--primary.is-busy { pointer-events: none; opacity: .8; }
+
+.btn--full { width: 100%; }
+
+.icon-btn {
+    display: grid;
+    place-items: center;
+    width: 28px; height: 28px;
+    border-radius: var(--r-sm);
+    color: var(--ink-3);
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+.icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+.icon-btn svg { width: 16px; height: 16px; }
+
+/* ---- Fields -------------------------------------------------------------- */
+
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+.field label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--ink-2);
+}
+
+.label__aside { font-size: 10.5px; color: var(--ink-4); font-weight: 500; letter-spacing: .04em; }
+
+.field__note { font-size: 11px; color: var(--ink-4); }
+
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+
+.input {
+    width: 100%;
+    height: 36px;
+    padding: 0 10px;
+    border-radius: var(--r);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    font-size: 13.5px;
+    transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+
+.input::placeholder { color: var(--ink-4); }
+.input:hover { border-color: #D5D3CE; }
+
+.input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(31, 75, 122, .10);
+}
+
+.input--icao {
+    text-transform: uppercase;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: .06em;
+}
+
+.input-wrap { position: relative; }
+
+.input-wrap__suffix {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11.5px;
+    color: var(--ink-4);
+    pointer-events: none;
+}
+
+.input-wrap .input { padding-right: 36px; }
+
+.input[type=number]::-webkit-inner-spin-button { opacity: .4; }
+.input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .45; cursor: pointer; }
+.input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover { opacity: .8; }
+
+/* ---- Status vocabulary --------------------------------------------------- */
+
+/* Status labels are NOT boxed — a box in this UI means "press me".
+   Severity reads through colour, weight and a leading dot instead. */
+.tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: .01em;
+    color: var(--ink-3);
+    background: none;
+    border: 0;
+    padding: 0;
+    white-space: nowrap;
+}
+
+.tag::before {
+    content: '';
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex: none;
+}
+
+/* The primary status of a row — set in small caps so it scans as a state. */
+.tag--sev {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.tag--ok   { color: var(--ok); }
+.tag--warn { color: var(--warn); }
+.tag--crit { color: var(--crit); }
+
+/* Reserved for Severe — a slow heartbeat on the dot, never a flash. */
+.tag--alert::before { animation: dotPulse 1.9s var(--ease) infinite; }
+
+/* Supporting detail: no dot, no colour, just quiet text. */
+.tag--quiet { color: var(--ink-3); font-weight: 500; }
+.tag--quiet::before { display: none; }
+
+.tag--label {
+    color: var(--ink-4);
+    font-weight: 600;
+    font-size: 10.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+}
+
+.tag--label::before { display: none; }
+
+/* ---- Segmented control --------------------------------------------------- */
+
+.seg {
+    display: inline-flex;
+    padding: 2px;
+    gap: 2px;
+    border-radius: var(--r);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+}
+
+.seg__btn {
+    padding: 4px 10px;
+    border-radius: var(--r-sm);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-3);
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+.seg__btn:hover { color: var(--ink); }
+.seg__btn.is-active { background: var(--surface); color: var(--ink); box-shadow: var(--sh-1); }
+
+/* ---- Theme toggle -------------------------------------------------------- */
+/* One control, not two buttons: press anywhere to flip. The knob overshoots
+   slightly on arrival and stretches while held — the iOS switch feel. */
+
+.theme-toggle { padding: 0; border-radius: 99px; -webkit-tap-highlight-color: transparent; }
+
+.theme-toggle__track {
+    position: relative;
+    display: block;
+    width: 54px; height: 28px;
+    border-radius: 99px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    transition: background .26s var(--ease), border-color .26s var(--ease);
+}
+
+.theme-toggle:hover .theme-toggle__track { border-color: var(--ink-4); }
+
+.theme-toggle__icon {
+    position: absolute;
+    top: 50%;
+    width: 13px; height: 13px;
+    margin-top: -6.5px;
+    transition: opacity .24s var(--ease), transform .32s var(--ease);
+}
+
+.theme-toggle__icon--sun  { left: 7px;  color: var(--warn); }
+.theme-toggle__icon--moon { right: 7px; color: var(--accent); }
+
+/* The inactive side recedes. */
+.theme-toggle__icon--moon { opacity: .32; transform: scale(.86); }
+
+:root[data-theme="dark"] .theme-toggle__icon--sun  { opacity: .3; transform: scale(.86); }
+:root[data-theme="dark"] .theme-toggle__icon--moon { opacity: 1; transform: none; }
+
+.theme-toggle__knob {
+    position: absolute;
+    top: 50%; left: 3px;
+    width: 21px; height: 21px;
+    margin-top: -10.5px;
+    border-radius: 99px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--sh-1);
+    /* Overshoot easing = the "pop" as it lands. */
+    transition: transform .36s cubic-bezier(.34, 1.48, .64, 1),
+                width .16s var(--ease),
+                background .26s var(--ease);
+}
+
+:root[data-theme="dark"] .theme-toggle__knob { transform: translateX(25px); }
+
+/* Held down: the knob stretches toward its destination. */
+.theme-toggle:active .theme-toggle__knob { width: 25px; }
+:root[data-theme="dark"] .theme-toggle:active .theme-toggle__knob { transform: translateX(21px); }
+
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ---- Route chip ---------------------------------------------------------- */
+
+.route-chip {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    min-width: 0;
+    animation: fade .3s var(--ease) both;
+}
+
+.route-chip__code {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink);
+    letter-spacing: .03em;
+}
+
+.route-chip__dash {
+    width: 14px;
+    height: 1px;
+    background: var(--ink-4);
+    flex: none;
+}
+
+.route-chip__meta {
+    padding-left: var(--s2);
+    margin-left: var(--s1);
+    border-left: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--ink-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- Modal --------------------------------------------------------------- */
+
+.modal {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    display: grid;
+    place-items: center;
+    padding: var(--s5);
+}
+
+.modal__scrim {
+    position: absolute;
+    inset: 0;
+    background: rgba(26, 26, 24, .32);
+    animation: fade .16s var(--ease);
+}
+
+.modal__panel {
+    position: relative;
+    width: min(760px, 100%);
+    max-height: min(84vh, 760px);
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--sh-2);
+    overflow: hidden;
+    animation: rise .22s var(--ease) both;
+}
+
+.modal__head {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--s4);
+    padding: var(--s4) var(--s5);
+    border-bottom: 1px solid var(--line);
+}
+
+.modal__head h2 { font-size: 15px; }
+.modal__sub { font-size: 12px; color: var(--ink-3); margin-top: 1px; }
+.modal__actions { margin-left: auto; display: flex; align-items: center; gap: var(--s2); }
+
+.modal__body { padding: 0 var(--s5) var(--s4); overflow-y: auto; }
+
+/* ---- Toasts -------------------------------------------------------------- */
+
+.toasts {
+    position: fixed;
+    right: var(--s5);
+    bottom: var(--s5);
+    z-index: 9500;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    pointer-events: none;
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 380px;
+    padding: 11px 14px;
+    border-radius: var(--r);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--sh-2);
+    font-size: 12.5px;
+    color: var(--ink-2);
+    animation: rise .22s var(--ease) both;
+    pointer-events: auto;
+}
+
+.toast.is-out { animation: fadeOut .18s var(--ease) forwards; }
+@keyframes fadeOut { to { opacity: 0; transform: translateY(4px) } }
+
+/* ---- Skeleton ------------------------------------------------------------ */
+
+.skeleton { display: flex; flex-direction: column; gap: var(--s7); padding-top: var(--s2); }
+
+.sk, .sk > i {
+    display: block;
+    border-radius: var(--r);
+    background: linear-gradient(90deg, var(--surface-2) 10%, var(--surface-3) 22%, var(--surface-2) 34%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s linear infinite;
+}
+
+.sk--stats { height: 66px; }
+.sk--split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s6); background: none; animation: none; }
+.sk--split > i { height: 150px; }
+.sk--map   { height: 320px; }
+.sk--rows  { display: flex; flex-direction: column; gap: 1px; background: none; animation: none; }
+.sk--rows > i { height: 62px; border-radius: 0; }
+
+@media (max-width: 900px) {
+    .sk--split { grid-template-columns: 1fr; }
+}

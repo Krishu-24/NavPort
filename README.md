@@ -1,206 +1,158 @@
-# SkyHigh
+# NavPort
 
-A comprehensive flight planning application that provides real-time aviation weather analysis, NOTAMs processing, and AI-powered risk assessment for pilots and aviation professionals.
+A flight weather dashboard for pilots and aviation planners. Enter a route,
+and NavPort pulls live METARs, TAFs, PIREPs, SIGMETs, G-AIRMETs and CWAs
+along the flight path, builds a 15-minute interval timeline, and produces a
+plain-English briefing with an automated risk assessment.
 
-## Features
+## How to Run
 
-### Core Functionality
-- Real-time aviation weather data integration (METAR, TAF, PIREPs, SIGMETs, G-AIRMETs, CWAs)
-- Flight route planning with waypoint support
-- Timeline-based weather analysis along flight paths
-- NOTAMs (Notice to Air Missions) integration and processing
-- AI-powered risk assessment and recommendations
+### Windows — one-click
 
-### Advanced Capabilities
-- Natural Language Processing for flight plan extraction
-- METAR code translation to plain English
-- Historical weather simulation for departure times up to 15 days past
-- Interactive weather timeline visualization
-- Comprehensive weather data source aggregation
+Double-click **[`run.bat`](run.bat)**. It will:
 
-### User Interface
-- Dual input methods: Manual form input and natural language processing
-- Interactive charts and visualizations
-- Responsive web design
-- Real-time UTC clock display
-- Tabbed interface for different input modes
+1. Check that Python is installed (and tell you where to get it if not).
+2. Create a virtual environment in `.venv/` — skipped if one already exists.
+3. Install dependencies from `requirements.txt` — skipped if they're already
+   up to date.
+4. Start the server and print `http://localhost:5000`.
+
+Re-running `run.bat` any time (including after a fresh `git pull`) is safe —
+it only re-installs dependencies when `requirements.txt` has actually
+changed, and never re-creates an existing virtual environment.
+
+### Manual setup (Windows / macOS / Linux)
+
+```bash
+python -m venv .venv
+```
+
+```bash
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
+```
+
+```bash
+pip install -r requirements.txt
+python run.py
+```
+
+Then open **http://localhost:5000**.
+
+## Documentation Hub
+
+| Doc | What's in it |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Request flow, module map, diagrams, why the backend is split the way it is |
+| This README | Setup, features, API endpoints, project layout |
+
+## What You Get
+
+| Capability | Details |
+|---|---|
+| **Route weather timeline** | 15-minute interval breakdown of the whole route, with severity (Clear / Significant / Severe) per segment |
+| **Live aviation data** | METAR, TAF, PIREP, SIGMET, G-AIRMET, CWA — fetched concurrently from aviationweather.gov |
+| **NOTAMs** | Time-appropriate NOTAM cards per airport (see [Data Sources](#data-sources) — currently simulated demo data) |
+| **Risk assessment** | Automated LOW / MODERATE / HIGH risk score with a recommendation, derived from the timeline |
+| **Plain-English briefing** | METAR/route conditions summarized in natural language (regex-based NLP, no external LLM call) |
+| **Pilot reports (PIREPs)** | Per-station PIREP lookup in a modal, toggle between a decoded summary and the raw report text |
+| **Raw data on demand** | Show/hide the raw METAR and TAF text behind any timeline interval without leaving the page |
+| **Route map** | Live map with the flight path drawn segment-by-segment in its severity colour, airport markers and per-interval condition popups |
+| **Severity ribbon** | Scrubbable strip of the entire route — hover to highlight, click to jump to that interval |
+| **Charts** | Wind (sustained + gusts) and visibility, colour-banded by aviation minimums |
+| **Responsive dashboard UI** | Dark flight-deck theme, animated risk gauge, skeleton loading states, off-canvas flight plan on mobile |
+
+## Architecture at a Glance
+
+```
+Browser (frontend/)  ──▶  Flask (backend/routes/)  ──▶  WeatherProcessor (backend/services/)
+                                                              │
+                                                              ▼
+                                            aviationweather.gov/api/data
+                                     (METAR · TAF · PIREP · SIGMET · G-AIRMET · CWA)
+```
+
+Full request flow, module responsibilities and design rationale are in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Repository Layout
+
+```
+NavPort/
+├── run.bat                    # Windows one-click launcher
+├── run.py                     # Entry point (python run.py)
+├── requirements.txt
+├── backend/
+│   ├── __init__.py            # Flask app factory
+│   ├── config.py              # Constants & lookup tables
+│   ├── models/pirep.py        # PIREP dataclass + raw-text parsing
+│   ├── services/               # PIREP fetch, NLP, weather aggregation
+│   └── routes/                 # /api/* Flask blueprints
+├── frontend/
+│   ├── index.html
+│   ├── css/                    # tokens · layout · components · dashboard
+│   ├── js/
+│   │   ├── main.js             # ES module entry point
+│   │   ├── core/               # api · state · dom · format
+│   │   ├── ui/                 # shell · toast
+│   │   └── views/              # overview · risk · ribbon · map · charts · notams · timeline · pireps
+│   └── assets/icon.png
+└── docs/
+    └── ARCHITECTURE.md
+```
+
+## API Endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/` | Serves the dashboard |
+| `POST` | `/api/enhanced-flight-plan` | Full route analysis: weather timeline, NOTAMs, risk assessment, briefing |
+| `POST` | `/api/process-natural-language` | Extracts departure/destination/waypoints/speed from free text |
+| `GET` | `/api/pirep-reports/<station_id>` | PIREPs near a station (`?distance=`, `?age=`, `?raw=true\|false`) |
 
 ## Technology Stack
 
-### Backend
-- **Framework**: Flask (Python)
-- **APIs**: Aviation Weather Center API (aviationweather.gov)
-- **Processing**: Concurrent data fetching, regex-based NLP
-- **Data Sources**: METAR, TAF, PIREP, SIGMET, G-AIRMET, CWA, NOTAMs
+**Backend:** Flask, `requests`, `concurrent.futures` for parallel API calls,
+regex-based NLP (no external ML/LLM dependency).
 
-### Frontend
-- **Languages**: HTML5, CSS3, JavaScript
-- **Visualization**: Chart.js for timeline graphs
-- **Styling**: Custom CSS with CSS Grid and Flexbox
-- **Architecture**: Single Page Application (SPA)
+**Frontend:** Native ES modules — no bundler, no build step, no framework
+runtime. Chart.js for the wind/visibility plots, Leaflet for the route map,
+Inter + JetBrains Mono via Google Fonts. Dark "glass cockpit" theme driven by
+CSS custom properties.
 
-## Installation
-
-### Prerequisites
-- Python 3.7 or higher
-- pip package manager
-
-### Setup Instructions
-
-1. Clone or download the project files
-2. Install required dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
-3. Start the Flask application:
-   ```
-   python app.py
-   ```
-4. Open your web browser and navigate to:
-   ```
-   http://localhost:5000
-   ```
-
-## Usage
-
-### Manual Flight Planning
-1. Enter departure and destination airport codes (ICAO format)
-2. Optionally add waypoints and adjust cruise speed
-3. Select departure date and time
-4. Click "Analyze with AI & NLP" to generate comprehensive weather briefing
-
-### Natural Language Input
-1. Switch to "Natural Language" tab
-2. Describe your flight plan in plain English
-3. Click "Process with NLP" to extract flight details
-4. Review extracted information and proceed with analysis
-
-### Weather Timeline Analysis
-The system provides:
-- 15-minute interval weather analysis along the entire flight path
-- Severity categorization (Clear, Significant, Severe)
-- Risk percentage calculation and recommendations
-- Interactive timeline chart visualization
-- Detailed conditions with nearest weather station data
+**Data:** [Aviation Weather Center](https://aviationweather.gov) public API.
 
 ## Data Sources
 
-### Real-time Weather Data
-- **Source**: Aviation Weather Center (aviationweather.gov)
-- **Coverage**: Worldwide aviation weather information
-- **Update Frequency**: Real-time to 3-hour intervals depending on product
-- **Historical Range**: Up to 15 days past data available
-
-### NOTAMs Information
-- **Current Implementation**: Demo data with time-based simulation
-- **Purpose**: Demonstrates NOTAM processing and integration capabilities
-- **Data Characteristics**: Realistic formatting, time-sensitive generation, severity classification
-
-### Production NOTAM Integration Options
-For production deployment, consider integrating with:
-- FAA NOTAM Search API (notams.aim.faa.gov)
-- Aviation Edge NOTAM API (commercial)
-- ICAO NOTAM Data Service
-- SWIM (System Wide Information Management) services
-
-## API Integration Notes
-
-### Current NOTAM Implementation
-The system currently uses simulated NOTAMs labeled as "Demo Data (Time-Based)" for demonstration purposes. This approach was chosen because:
-
-- Real NOTAM APIs require authentication and often paid subscriptions
-- FAA services require complex registration processes
-- Commercial APIs have usage limits and costs
-- The demo system provides realistic data for development and testing
-
-### Upgrading to Real NOTAM APIs
-To integrate real NOTAM data:
-
-1. **FAA NOTAM Search API**
-   - Register at: https://notams.aim.faa.gov/notamWFS/
-   - Implement SOAP/REST client integration
-   - Handle authentication and rate limiting
-
-2. **Commercial APIs**
-   - Aviation Edge NOTAM API (paid service)
-   - Provides global NOTAM coverage
-   - JSON/XML response formats
-
-3. **SWIM Services**
-   - Enterprise-level integration
-   - Requires FAA certification process
-   - Real-time NOTAM streaming
+- **Live weather** (METAR/TAF/PIREP/SIGMET/G-AIRMET/CWA/station info): real
+  data from aviationweather.gov, up to 15 days historical and a few hours of
+  forecast, depending on product.
+- **NOTAMs**: currently deterministic demo data (see
+  [docs/ARCHITECTURE.md §4](docs/ARCHITECTURE.md#4-notams-are-simulated)) —
+  real NOTAM feeds require an authenticated/paid API (FAA NOTAM Search, SWIM,
+  or a commercial provider). Every generated NOTAM is labeled
+  `"source": "Demo Data (Time-Based)"` in API responses so this is never
+  mistaken for live data.
+- **Weather outside the API's real-time window** is deterministically
+  simulated from the nearest real observation so the full route timeline can
+  still be rendered.
 
 ## Configuration
 
-### Time Zones
-- All times displayed and processed in UTC
-- Departure time input automatically converted to UTC
-- Timeline analysis shows UTC timestamps
+Environment variables (all optional, read in `backend/config.py`):
 
-### Data Limits
-- Weather data: 15 days historical, 4 hours future
-- Flight path analysis: Up to 200 nautical mile search radius
-- Timeline intervals: 15-minute segments for detailed analysis
-
-## Architecture
-
-### Request Flow
-1. User input validation and processing
-2. Airport coordinate lookup via Aviation Weather API
-3. Flight path calculation with haversine distance formula
-4. Concurrent weather data fetching from multiple endpoints
-5. Timeline generation with weather condition simulation
-6. Risk assessment calculation and natural language summary generation
-
-### Data Processing
-- Real-time API calls for current weather conditions
-- Historical weather simulation for past departure times
-- Weather categorization using aviation-standard criteria
-- Natural language processing using regex pattern matching
-
-## Development
-
-### Project Structure
-```
-├── app.py              # Flask backend application
-├── index.html          # Frontend single-page application
-├── requirements.txt    # Python dependencies
-└── README.md          # Documentation
-```
-
-### Key Classes
-- `SimpleNLPProcessor`: Handles natural language processing and METAR decoding
-- `WeatherProcessor`: Manages API calls, data processing, and timeline generation
-
-### Extending Functionality
-The modular architecture supports easy integration of:
-- Additional weather data sources
-- Enhanced natural language processing capabilities
-- Machine learning models for weather prediction
-- Real-time NOTAM feeds
-
-## Browser Compatibility
-
-- Chrome 80+
-- Firefox 75+
-- Safari 13+
-- Edge 80+
-
-## Rate Limiting
-
-The application implements responsible API usage:
-- Maximum 100 requests per minute to weather APIs
-- Concurrent request limiting with timeout handling
-- Graceful error handling for rate limit exceeded scenarios
-
-## License
-
-This project is developed for educational and demonstration purposes. Weather data is provided by the Aviation Weather Center. Users should verify all information through official sources before making flight-related decisions.
+| Variable | Default | Purpose |
+|---|---|---|
+| `NAVPORT_HOST` | `0.0.0.0` | Bind address |
+| `NAVPORT_PORT` | `5000` | Port |
+| `NAVPORT_DEBUG` | `true` | Flask debug/reload mode |
 
 ## Disclaimer
 
-This application is for informational purposes only. All weather information should be verified through official aviation weather sources. Do not use this application as the sole source for flight planning decisions. Always consult official NOTAMs, weather briefings, and follow appropriate aviation regulations and procedures.
-
-
-
+This application is for informational and educational purposes only. All
+weather information should be verified through official aviation weather
+sources. Do not use this application as the sole source for flight planning
+decisions — always consult official NOTAMs, weather briefings, and follow
+applicable aviation regulations.

@@ -1,0 +1,259 @@
+/* ==========================================================================
+   NavPort · Foundations
+   Warm-neutral paper, ink typography, one restrained accent.
+   Severity is the only place colour is allowed to raise its voice.
+   Light is the default; [data-theme="dark"] swaps the same token names.
+   ========================================================================== */
+
+:root {
+    color-scheme: light;
+
+    /* ---- Surfaces ---- */
+    --paper:     #FBFBFA;
+    --surface:   #FFFFFF;
+    --surface-2: #F4F4F1;
+    --surface-3: #EAE9E5;
+
+    --line:      #DCDBD6;
+    --line-soft: #E9E8E4;
+
+    /* ---- Ink (darkened for cockpit legibility) ---- */
+    --ink:   #17170F;
+    --ink-2: #3D3A34;
+    --ink-3: #5C584F;
+    --ink-4: #7E7A71;
+
+    /* ---- Accent ---- */
+    --accent:       #1B4A7C;
+    --accent-hover: #143761;
+    --accent-tint:  #E9F0F7;
+    --accent-line:  #B9CFE4;
+
+    /* ---- Severity: pastel fills, saturated ink, legible edges ---- */
+    --ok:   #256B49;  --ok-tint:   #E8F2EC;  --ok-line:   #B4D3C1;
+    --warn: #8A5D06;  --warn-tint: #FBF1DC;  --warn-line: #E3C88E;
+    --crit: #A02A20;  --crit-tint: #FBE9E6;  --crit-line: #EBB6AE;
+
+    /* Row wash — a whisper of the tint, for colour-coding whole rows */
+    --ok-wash:   #F4F9F6;
+    --warn-wash: #FDF8EE;
+    --crit-wash: #FDF3F1;
+
+    /* ---- Type ---- */
+    --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+    /* ---- Space (4pt scale) ---- */
+    --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+    --s5: 24px; --s6: 32px; --s7: 44px; --s8: 64px;
+
+    /* ---- Geometry ---- */
+    --r-sm: 4px;
+    --r:    6px;
+    --r-lg: 10px;
+
+    --rail: 288px;
+    --topbar-h: 61px;
+    --gutter: 40px;
+
+    /* Translucent bars need their own token — rgba can't be derived from --paper */
+    --paper-veil: rgba(251, 251, 250, .86);
+
+    --sh-1: 0 1px 2px rgba(23, 23, 15, .06);
+    --sh-2: 0 12px 32px -8px rgba(23, 23, 15, .18), 0 2px 6px rgba(23, 23, 15, .07);
+
+    --ease: cubic-bezier(.2, .6, .35, 1);
+    --fast: .13s;
+}
+
+/* ---- Dark theme -------------------------------------------------------- */
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --paper:     #131311;
+    --surface:   #1A1A17;
+    --surface-2: #21211D;
+    --surface-3: #2B2B26;
+
+    --line:      #302F2A;
+    --line-soft: #262622;
+
+    --ink:   #F3F2EE;
+    --ink-2: #C9C6BE;
+    --ink-3: #A29E95;
+    --ink-4: #837F76;
+
+    --accent:       #7FB3E8;
+    --accent-hover: #9AC5F0;
+    --accent-tint:  rgba(127, 179, 232, .13);
+    --accent-line:  rgba(127, 179, 232, .34);
+
+    --ok:   #74C79C;  --ok-tint:   rgba(116, 199, 156, .14);  --ok-line:   rgba(116, 199, 156, .34);
+    --warn: #E4B667;  --warn-tint: rgba(228, 182, 103, .14);  --warn-line: rgba(228, 182, 103, .34);
+    --crit: #EC8A80;  --crit-tint: rgba(236, 138, 128, .14);  --crit-line: rgba(236, 138, 128, .34);
+
+    --ok-wash:   rgba(116, 199, 156, .07);
+    --warn-wash: rgba(228, 182, 103, .07);
+    --crit-wash: rgba(236, 138, 128, .08);
+
+    --paper-veil: rgba(19, 19, 17, .86);
+
+    --sh-1: 0 1px 2px rgba(0, 0, 0, .4);
+    --sh-2: 0 14px 36px -10px rgba(0, 0, 0, .6), 0 2px 8px rgba(0, 0, 0, .35);
+}
+
+/* Follow the OS until the user picks a side. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        color-scheme: dark;
+
+        --paper:     #131311;
+        --surface:   #1A1A17;
+        --surface-2: #21211D;
+        --surface-3: #2B2B26;
+
+        --line:      #302F2A;
+        --line-soft: #262622;
+
+        --ink:   #F3F2EE;
+        --ink-2: #C9C6BE;
+        --ink-3: #A29E95;
+        --ink-4: #837F76;
+
+        --accent:       #7FB3E8;
+        --accent-hover: #9AC5F0;
+        --accent-tint:  rgba(127, 179, 232, .13);
+        --accent-line:  rgba(127, 179, 232, .34);
+
+        --ok:   #74C79C;  --ok-tint:   rgba(116, 199, 156, .14);  --ok-line:   rgba(116, 199, 156, .34);
+        --warn: #E4B667;  --warn-tint: rgba(228, 182, 103, .14);  --warn-line: rgba(228, 182, 103, .34);
+        --crit: #EC8A80;  --crit-tint: rgba(236, 138, 128, .14);  --crit-line: rgba(236, 138, 128, .34);
+
+        --ok-wash:   rgba(116, 199, 156, .07);
+        --warn-wash: rgba(228, 182, 103, .07);
+        --crit-wash: rgba(236, 138, 128, .08);
+
+        --paper-veil: rgba(19, 19, 17, .86);
+
+        --sh-1: 0 1px 2px rgba(0, 0, 0, .4);
+        --sh-2: 0 14px 36px -10px rgba(0, 0, 0, .6), 0 2px 8px rgba(0, 0, 0, .35);
+    }
+}
+
+/* ---- Reset ------------------------------------------------------------- */
+
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+
+/* Painted on the root, not <body>: a body background is propagated to the
+   viewport canvas, and that propagated value doesn't repaint reliably when
+   the custom property behind it changes. */
+html { background-color: var(--paper); }
+
+body {
+    background-color: transparent;
+    color: var(--ink-2);
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Longhand only: transitioning the `background` shorthand against a custom
+       property leaves the computed value stale in Chromium on theme switch. */
+    transition: background-color .2s var(--ease), color .2s var(--ease);
+}
+
+h1, h2, h3, h4 {
+    color: var(--ink);
+    font-weight: 600;
+    letter-spacing: -.011em;
+    line-height: 1.3;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: none; border: none; cursor: pointer; }
+ul, ol { list-style: none; }
+svg { display: block; }
+canvas { display: block; }
+
+.mono, .clock__time, .input--mono, .input--icao {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'zero' 1;
+}
+
+/* ---- Focus ---- */
+
+:focus { outline: none; }
+
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+}
+
+/* ---- Scrollbars ---- */
+
+* { scrollbar-width: thin; scrollbar-color: var(--surface-3) transparent; }
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: var(--surface-3);
+    border: 4px solid transparent;
+    background-clip: content-box;
+    border-radius: 99px;
+}
+
+/* ---- Shared atoms ---- */
+
+.eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+}
+
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-4); flex: none; }
+.dot--ok   { background: var(--ok); }
+.dot--warn { background: var(--warn); }
+.dot--crit { background: var(--crit); }
+
+/* ---- Motion ---- */
+
+@keyframes rise {
+    from { opacity: 0; transform: translateY(7px); }
+    to   { opacity: 1; transform: none; }
+}
+
+@keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes fadeOut { to { opacity: 0; transform: translateY(4px) } }
+@keyframes shimmer { to { background-position: 200% 0 } }
+@keyframes spin { to { transform: rotate(360deg) } }
+@keyframes growX { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+
+/* The severity heartbeat — only ever used on Severe. */
+@keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 0 0 var(--crit-line); opacity: 1; }
+    55%      { box-shadow: 0 0 0 4px transparent;    opacity: .55; }
+}
+
+/* Indeterminate scan line shown while a briefing is being built. */
+@keyframes scanSweep {
+    0%   { transform: translateX(-100%) }
+    100% { transform: translateX(400%) }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+    }
+}

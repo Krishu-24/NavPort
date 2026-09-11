@@ -1,0 +1,204 @@
+/* ==========================================================================
+   NavPort · Shell — rail, topbar, and the vertical rhythm of the page
+   ========================================================================== */
+
+.shell {
+    display: grid;
+    grid-template-columns: var(--rail) minmax(0, 1fr);
+    min-height: 100vh;
+}
+
+/* ---- Rail ---------------------------------------------------------------- */
+
+.rail {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s6);
+    padding: var(--s5) var(--s5) var(--s4);
+    background: var(--surface);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+    z-index: 40;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    height: 28px;
+}
+
+.brand__mark {
+    width: 22px; height: 22px;
+    display: grid;
+    place-items: center;
+    color: var(--ink);
+    flex: none;
+}
+
+.brand__mark svg { width: 18px; height: 18px; }
+
+.brand__name {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -.015em;
+}
+
+.rail__close.icon-btn { display: none; margin-left: auto; }
+
+.plan { display: flex; flex-direction: column; gap: var(--s4); }
+
+.plan .eyebrow { margin-bottom: calc(var(--s1) * -1); }
+
+.rail__foot {
+    margin-top: auto;
+    padding-top: var(--s4);
+    border-top: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    font-size: 11.5px;
+    color: var(--ink-3);
+}
+
+.scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    background: rgba(26, 26, 24, .28);
+    animation: fade .16s var(--ease);
+}
+
+/* ---- Main ---------------------------------------------------------------- */
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+
+.topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    height: var(--topbar-h);
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--s4);
+    padding: 0 var(--gutter);
+    background: var(--paper-veil);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+}
+
+.topbar__menu.icon-btn { display: none; }
+
+.topbar__title {
+    font-size: 14.5px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.topbar__right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--s4);
+}
+
+.clock {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s2);
+}
+
+.clock__label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    color: var(--ink-4);
+}
+
+.clock__time { font-size: 13px; font-weight: 500; color: var(--ink-2); }
+
+/* ---- Content rhythm ------------------------------------------------------ */
+
+.content {
+    flex: 1;
+    width: 100%;
+    max-width: 1160px;
+    margin: 0 auto;
+    padding: var(--s6) var(--gutter) var(--s8);
+}
+
+.results { display: flex; flex-direction: column; }
+
+.results > * { animation: rise .34s var(--ease) both; }
+.results > *:nth-child(2) { animation-delay: .04s }
+.results > *:nth-child(3) { animation-delay: .08s }
+.results > *:nth-child(4) { animation-delay: .10s }
+.results > *:nth-child(5) { animation-delay: .12s }
+.results > *:nth-child(6) { animation-delay: .14s }
+.results > *:nth-child(7) { animation-delay: .16s }
+
+/* A section is a heading + open content. No frame, no shadow. */
+.section { padding-top: var(--s7); }
+
+.section__head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s4);
+    padding-bottom: var(--s3);
+    margin-bottom: var(--s4);
+    border-bottom: 1px solid var(--line);
+}
+
+.section__head h2 {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.section__note {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--ink-3);
+}
+
+.legend {
+    margin-left: auto;
+    display: flex;
+    gap: var(--s4);
+    font-size: 11.5px;
+    color: var(--ink-3);
+}
+
+.legend span { display: flex; align-items: center; gap: 6px; }
+
+/* ---- Responsive ---------------------------------------------------------- */
+
+@media (max-width: 1080px) {
+    :root { --gutter: 24px; }
+}
+
+@media (max-width: 900px) {
+    .shell { grid-template-columns: minmax(0, 1fr); }
+
+    .rail {
+        position: fixed;
+        top: 0; left: 0;
+        width: min(300px, 86vw);
+        transform: translateX(-101%);
+        transition: transform .22s var(--ease);
+        box-shadow: var(--sh-2);
+    }
+
+    .rail.is-open { transform: none; }
+    .rail__close.icon-btn  { display: grid; }
+    .topbar__menu.icon-btn { display: grid; }
+}
+
+@media (max-width: 720px) {
+    :root { --gutter: 16px; }
+    .topbar__title { display: none; }
+    .content { padding-top: var(--s5); }
+}
