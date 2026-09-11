@@ -7,6 +7,7 @@ import logging
 import math
 import random
 import re
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
@@ -17,6 +18,7 @@ from backend.config import (
     MAX_FUTURE_DEPARTURE_HOURS,
     MAX_PAST_DEPARTURE_DAYS,
 )
+from backend.services import airports, flight_rules
 from backend.services.nlp_processor import SimpleNLPProcessor
 from backend.services.pirep_service import PIREPService
 
@@ -507,8 +509,9 @@ class WeatherProcessor:
         return sample_notams
 
     def enhance_metar(self, metar: Dict) -> Dict:
-        """Enhance METAR data with categorization."""
+        """Enhance METAR data with the internal severity and the FAA category."""
         metar['category'] = self.categorize_weather(metar)
+        metar.update(flight_rules.categorise(metar))
         return metar
 
     # ------------------------------------------------------------------ #
@@ -544,15 +547,205 @@ class WeatherProcessor:
                     'lon': lon,
                     'conditions': conditions,
                     'severity': conditions['severity'],
+                    'flight_category': conditions.get('flight_category', 'VFR'),
+                    'ceiling_ft': conditions.get('ceiling_ft'),
                     'flight_segment': f"{segment['from']} -> {segment['to']}",
                     'wind_speed': conditions.get('wind_speed', 0),
                     'wind_gust': conditions.get('wind_gust', 0),
+                    'wind_dir': conditions.get('wind_dir'),
                     'visibility': conditions.get('visibility', 10),
                     'temperature': conditions.get('temperature', 15),
                     'raw_data': raw_data,
                 })
 
         return timeline
+
+    # ------------------------------------------------------------------ #
+    # Airfield conditions
+    # ------------------------------------------------------------------ #
+    def get_metars_by_ids(self, ids: List[str]) -> Dict[str, Dict]:
+        """Latest METAR for specific stations, keyed by station id."""
+        if not ids:
+            return {}
+
+        try:
+            response = self.session.get(
+                f"{self.base_url}/metar",
+                params={'ids': ','.join(sorted({i.upper() for i in ids if i})), 'format': 'json'},
+                timeout=10,
+            )
+            if response.status_code != 200:
+                return {}
+
+            latest: Dict[str, Dict] = {}
+            for metar in response.json():
+                station = metar.get('icaoId')
+                if not station:
+                    continue
+                seen = latest.get(station)
+                if not seen or str(metar.get('reportTime', '')) > str(seen.get('reportTime', '')):
+                    latest[station] = self.enhance_metar(metar)
+            return latest
+
+        except Exception as e:
+            logging.error(f"Error fetching METARs for {ids}: {e}")
+            return {}
+
+    def airfield_reports(self, icaos: List[str]) -> Dict[str, Dict]:
+        """Identity + current conditions + density altitude for named airfields.
+
+        Density altitude is a standard element of an FAA preflight briefing: it
+        is what decides whether the aircraft will actually perform today.
+        """
+        metars = self.get_metars_by_ids(icaos)
+        reports = {}
+
+        for icao in icaos:
+            code = icao.upper()
+            metar = metars.get(code, {})
+            identity = airports.describe(code)
+
+            rules = flight_rules.categorise(metar) if metar else {}
+            performance = flight_rules.density_altitude(
+                metar.get('temp'), metar.get('altim'), metar.get('elev')) if metar else None
+
+            wind_dir = metar.get('wdir')
+            reports[code] = {
+                'identity': identity,
+                'observed': bool(metar),
+                'raw': metar.get('rawOb', ''),
+                'flight_category': rules.get('flight_category'),
+                'ceiling_ft': rules.get('ceiling_ft'),
+                'visibility_sm': rules.get('visibility_sm'),
+                'temp_c': metar.get('temp'),
+                'dewpoint_c': metar.get('dewp'),
+                'altimeter_hpa': metar.get('altim'),
+                'wind_dir': wind_dir if isinstance(wind_dir, (int, float)) else None,
+                'wind_speed': metar.get('wspd') or 0,
+                'wind_gust': metar.get('wgst'),
+                'performance': performance,
+            }
+
+        return reports
+
+    # ------------------------------------------------------------------ #
+    # Diversion planning
+    # ------------------------------------------------------------------ #
+    def find_alternates(self, icao: str, radius_nm: int = 200, limit: int = 8,
+                        runway_heading: Optional[float] = None,
+                        min_category: str = 'MVFR') -> Dict:
+        """Nearby airports that are usable alternates for `icao`.
+
+        This is the question that follows a bad forecast: the destination is
+        IFR — where can I actually go? A candidate qualifies when it is no
+        worse than the destination *and* at least `min_category`, so a VFR
+        destination still lists usable peers instead of an empty panel.
+        """
+        origin = self.get_airport_coordinates(icao)
+        if not origin:
+            return {'error': f'Unknown airport {icao}'}
+
+        lat, lon = origin['lat'], origin['lon']
+
+        # Pad the bounding box so the circle fits inside it.
+        d_lat = radius_nm / 60.0
+        d_lon = radius_nm / max(1e-6, 60.0 * math.cos(math.radians(lat)))
+        bbox = f"{lat - d_lat},{lon - d_lon},{lat + d_lat},{lon + d_lon}"
+
+        # This call lands right behind the briefing's 7-way concurrent burst, so
+        # upstream sometimes throttles it to an empty body. One short retry turns
+        # a blank diversion panel back into a useful one.
+        metars = self.get_historical_metars_by_bbox(bbox, None)
+        if not metars:
+            time.sleep(1.2)
+            metars = self.get_historical_metars_by_bbox(bbox, None)
+
+        # Newest report per station.
+        latest: Dict[str, Dict] = {}
+        for metar in metars:
+            station = metar.get('icaoId')
+            if not station:
+                continue
+            seen = latest.get(station)
+            if not seen or str(metar.get('reportTime', '')) > str(seen.get('reportTime', '')):
+                latest[station] = metar
+
+        target = latest.get(icao.upper())
+        target_rules = flight_rules.categorise(target) if target else None
+
+        # With no observation for the destination we can't say how bad it is —
+        # claiming LIFR would invent a hazard. Fall back to the floor instead.
+        target_category = target_rules['flight_category'] if target_rules else min_category
+
+        options = []
+        for station, metar in latest.items():
+            if station.upper() == icao.upper():
+                continue
+
+            m_lat, m_lon = metar.get('lat'), metar.get('lon')
+            if m_lat is None or m_lon is None:
+                continue
+
+            try:
+                distance = self.haversine_distance(lat, lon, float(m_lat), float(m_lon))
+            except (TypeError, ValueError):
+                continue
+
+            if distance > radius_nm:
+                continue
+
+            rules = flight_rules.categorise(metar)
+            rank = flight_rules.RANK[rules['flight_category']]
+
+            if rank < flight_rules.RANK[target_category]:
+                continue
+            if rank < flight_rules.RANK.get(min_category, 2):
+                continue
+
+            bearing = flight_rules.bearing_between(lat, lon, float(m_lat), float(m_lon))
+            wind_dir = metar.get('wdir')
+            wind_speed = metar.get('wspd')
+
+            identity = airports.describe(station)
+            option = {
+                'station': station,
+                'identity': identity,
+                'name': identity['name'] or metar.get('name') or station,
+                'distance_nm': round(distance),
+                'bearing': bearing,
+                'compass': flight_rules.compass_point(bearing),
+                'flight_category': rules['flight_category'],
+                'improvement': flight_rules.is_better(rules['flight_category'], target_category),
+                'ceiling_ft': rules['ceiling_ft'],
+                'visibility_sm': rules['visibility_sm'],
+                'wind_dir': wind_dir if isinstance(wind_dir, (int, float)) else None,
+                'wind_speed': wind_speed or 0,
+                'wind_gust': metar.get('wgst'),
+                'raw': metar.get('rawOb', ''),
+            }
+
+            if runway_heading is not None:
+                option['wind_components'] = flight_rules.wind_components(
+                    option['wind_dir'], option['wind_speed'], runway_heading)
+
+            options.append(option)
+
+        # Best category first, then nearest — a VFR field 90 nm out beats an
+        # MVFR one at 40 nm when you need somewhere to actually land.
+        options.sort(key=lambda o: (-flight_rules.RANK[o['flight_category']], o['distance_nm']))
+
+        return {
+            'station': icao.upper(),
+            'name': origin.get('name', icao),
+            'observed': target is not None,
+            'flight_category': target_rules['flight_category'] if target_rules else None,
+            'ceiling_ft': target_rules['ceiling_ft'] if target_rules else None,
+            'visibility_sm': target_rules['visibility_sm'] if target_rules else None,
+            'raw': target.get('rawOb', '') if target else '',
+            'searched_nm': radius_nm,
+            'alternates': options[:limit],
+            'total_found': len(options),
+        }
 
     def get_raw_data_for_location(self, lat: float, lon: float, weather_data: Dict) -> Dict:
         """Get raw METAR/TAF/PIREP data near a location for the show/hide raw-data panels."""
@@ -655,6 +848,8 @@ class WeatherProcessor:
         else:
             visibility_val = float(visibility_val) if visibility_val else 10
 
+        rules = flight_rules.categorise(simulated_weather)
+
         return {
             'severity': severity,
             'condition': condition,
@@ -663,6 +858,9 @@ class WeatherProcessor:
             'pirep_count': len(pirep_reports),
             'nearest_station': nearest_station_id or 'Unknown',
             'natural_language': simulated_weather.get('natural_language', ''),
+            'flight_category': rules['flight_category'],
+            'ceiling_ft': rules['ceiling_ft'],
+            'wind_dir': simulated_weather.get('wdir'),
             'wind_speed': simulated_weather.get('wspd', 0) or 0,
             'wind_gust': simulated_weather.get('wgst', 0) or 0,
             'visibility': visibility_val,

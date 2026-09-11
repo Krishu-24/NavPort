@@ -1,0 +1,102 @@
+/* ==========================================================================
+   NavPort · Print / Save-as-PDF
+   A briefing is a document a pilot files. On paper it should be ink on white,
+   with the chrome gone and nothing split across a page break.
+   ========================================================================== */
+
+/* Hidden on screen, shown only on paper. */
+.print-head { display: none; }
+
+@media print {
+    /* Force the light palette — nobody prints a dark theme. */
+    :root, :root[data-theme="dark"] {
+        --paper: #FFFFFF;
+        --surface: #FFFFFF;
+        --surface-2: #FFFFFF;
+        --surface-3: #EEEEEE;
+        --line: #BBBBBB;
+        --line-soft: #DDDDDD;
+        --ink: #000000;
+        --ink-2: #222222;
+        --ink-3: #444444;
+        --ink-4: #666666;
+    }
+
+    *, *::before, *::after {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        box-shadow: none !important;
+        animation: none !important;
+        transition: none !important;
+    }
+
+    @page { margin: 14mm 12mm; }
+
+    html, body { background: #fff !important; font-size: 10.5pt; }
+
+    /* Chrome that means nothing on paper */
+    .rail, .topbar, .scrim, .toasts, .modal,
+    .tl__toggles, .empty, .skeleton,
+    .leaflet-control-container, .ribbon__axis { display: none !important; }
+
+    .shell { display: block !important; }
+    .content { max-width: none; padding: 0; margin: 0; }
+    .results > * { animation: none !important; opacity: 1 !important; transform: none !important; }
+
+    /* Printed header */
+    .print-head {
+        display: block;
+        margin-bottom: 10mm;
+        padding-bottom: 4mm;
+        border-bottom: 1.5pt solid #000;
+    }
+
+    .print-head__brand {
+        font-size: 8.5pt;
+        font-weight: 600;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: #444;
+    }
+
+    .print-head__route {
+        font-family: var(--mono);
+        font-size: 20pt;
+        font-weight: 600;
+        margin-top: 2mm;
+    }
+
+    .print-head__meta { font-size: 9.5pt; color: #333; margin-top: 1.5mm; }
+
+    .print-head__note {
+        margin-top: 3mm;
+        font-size: 8.5pt;
+        font-style: italic;
+        color: #555;
+    }
+
+    /* Keep related content together */
+    .section { padding-top: 8mm; break-inside: avoid; }
+    .section__head { border-bottom: 1pt solid #999; }
+
+    .row, .alt, .stat, .plot, .panel, .pirep {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    /* The map is the one thing worth a page of its own */
+    .map { height: 95mm; break-inside: avoid; }
+
+    .stats { grid-template-columns: repeat(3, 1fr); }
+    .plots { grid-template-columns: 1fr 1fr; }
+    .plot__canvas { height: 45mm; }
+    .divert__grid { grid-template-columns: repeat(2, 1fr); }
+
+    /* Severity washes are the whole point of the colour coding — keep them,
+       but add a printable border in case the printer is monochrome. */
+    .row--warn { border-left: 3pt solid #8A5D06 !important; }
+    .row--crit { border-left: 3pt solid #A02A20 !important; }
+    .row--ok   { border-left: 3pt solid #BBBBBB !important; }
+
+    a[href]::after { content: ''; }
+}

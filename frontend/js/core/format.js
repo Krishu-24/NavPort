@@ -63,11 +63,29 @@ function toDate(value) {
     return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** FAA flight categories, worst to best. */
+export const CATEGORY = {
+    LIFR: { key: 'lifr', label: 'LIFR', title: 'Low instrument flight rules' },
+    IFR:  { key: 'ifr',  label: 'IFR',  title: 'Instrument flight rules' },
+    MVFR: { key: 'mvfr', label: 'MVFR', title: 'Marginal visual flight rules' },
+    VFR:  { key: 'vfr',  label: 'VFR',  title: 'Visual flight rules' },
+};
+
+export const cat = (name) => CATEGORY[name] || CATEGORY.VFR;
+
+/** Ceiling in feet, or the standard "unlimited" shorthand. */
+export const ceiling = (ft) =>
+    (ft === null || ft === undefined ? 'Unlimited' : `${Number(ft).toLocaleString()} ft`);
+
 /** The API writes legs as "KJFK -> KORD"; render a real arrow. */
 export const place = (text = '') => text.replace(/\s*->\s*/g, ' → ');
 
 /** Visibility comes back as a float like 3.5684387624071725 — nobody needs that. */
 export function visibility(value) {
+    // Number(null) and Number('') are both 0, which would print a missing
+    // reading as a very alarming "0.00 sm". Reject empties before converting.
+    if (value === null || value === undefined || value === '') return '—';
+
     const n = Number(value);
     if (!Number.isFinite(n)) return '—';
     if (n >= 10) return '10+';

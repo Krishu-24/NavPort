@@ -486,45 +486,48 @@
     flex-wrap: wrap;
 }
 
-/* Boxed = pressable, but quietly: hairline outline, no fill, no shadow, no lift.
-   The outline alone is enough affordance at this size. */
+/* Boxed = pressable. A filled surface against the row's wash reads as a button
+   without shouting; the chevron sits after the label so the left edge is tight. */
 .toggle {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    height: 24px;
-    padding: 0 8px;
+    gap: 6px;
+    height: 26px;
+    padding: 0 9px;
     border-radius: var(--r-sm);
-    background: transparent;
-    border: 1px solid var(--line-soft);
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--ink-3);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--ink-2);
     transition: border-color var(--fast) var(--ease),
                 background var(--fast) var(--ease),
                 color var(--fast) var(--ease);
 }
 
 .toggle:hover {
-    color: var(--ink-2);
-    border-color: var(--line);
+    color: var(--ink);
+    border-color: var(--ink-4);
     background: var(--surface-2);
 }
+
+.toggle:active { background: var(--surface-3); }
 
 .toggle.is-on {
     color: var(--accent);
     border-color: var(--accent-line);
-    background: transparent;
+    background: var(--accent-tint);
 }
 
 .toggle__chev {
     width: 9px; height: 9px;
-    opacity: .4;
+    margin-left: 1px;
+    opacity: .45;
     transition: transform .22s var(--ease), opacity var(--fast) var(--ease);
 }
 
-.toggle:hover .toggle__chev { opacity: .7; }
-.toggle.is-on .toggle__chev { transform: rotate(180deg); opacity: .85; }
+.toggle:hover .toggle__chev { opacity: .75; }
+.toggle.is-on .toggle__chev { transform: rotate(180deg); opacity: .9; }
 
 .toggle__n {
     font-family: var(--mono);
@@ -575,6 +578,153 @@
 }
 
 .obs__nlp { font-size: 12px; color: var(--ink-2); margin-top: 7px; line-height: 1.6; }
+
+/* ---- Airfield conditions -------------------------------------------------- */
+
+.airfields { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s4); }
+
+.airfield {
+    padding: var(--s4);
+    border-radius: var(--r);
+    border: 1px solid var(--line-soft);
+    background: var(--surface);
+}
+
+.airfield__head { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4); flex-wrap: wrap; }
+
+.airfield__role {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+}
+
+.airfield__code { font-size: 15px; }
+
+.airfield__grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s3); }
+
+.field-readout__label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+    margin-bottom: 3px;
+}
+
+.field-readout__value {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink);
+}
+
+.airfield__none { font-size: 12.5px; color: var(--ink-3); }
+
+.airfield__perf {
+    margin-top: var(--s4);
+    padding-top: var(--s3);
+    border-top: 1px solid var(--line-soft);
+}
+
+.airfield__perf-main { display: flex; align-items: baseline; gap: var(--s2); }
+
+.airfield__perf-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+}
+
+.airfield__perf-value {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--ink);
+}
+
+.airfield__perf.is-significant .airfield__perf-value { color: var(--warn); }
+
+.airfield__perf-sub { margin-top: 4px; font-size: 11px; color: var(--ink-3); }
+
+.airfield__warn {
+    margin-top: var(--s2);
+    padding: 7px 9px;
+    border-radius: var(--r-sm);
+    background: var(--warn-tint);
+    border: 1px solid var(--warn-line);
+    font-size: 11.5px;
+    color: var(--warn);
+    font-weight: 500;
+}
+
+@media (max-width: 900px) {
+    .airfields { grid-template-columns: 1fr; }
+    .airfield__grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ---- Diversion options ---------------------------------------------------- */
+
+.divert__head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s3);
+    flex-wrap: wrap;
+    padding: var(--s3) var(--s4);
+    margin-bottom: var(--s3);
+    border-radius: var(--r);
+    background: var(--surface-2);
+    border: 1px solid var(--line-soft);
+}
+
+.divert__station { font-family: var(--mono); font-size: 14px; font-weight: 600; color: var(--ink); }
+.divert__name { font-size: 12.5px; color: var(--ink-3); }
+.divert__note { margin-left: auto; font-size: 11.5px; color: var(--ink-3); }
+
+.divert__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+    gap: var(--s2);
+}
+
+.alt {
+    padding: var(--s3) var(--s4);
+    border-radius: var(--r);
+    border: 1px solid var(--line-soft);
+    background: var(--surface);
+    transition: border-color var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+
+.alt:hover { border-color: var(--line); transform: translateY(-1px); }
+
+.alt__top { display: flex; align-items: baseline; gap: var(--s2); margin-bottom: 6px; }
+.alt__code { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--ink); }
+.alt__dist { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); }
+
+.alt__name {
+    font-size: 11.5px;
+    color: var(--ink-3);
+    margin-bottom: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.alt__wx { display: flex; gap: var(--s4); font-size: 11.5px; color: var(--ink-2); }
+.alt__wx b { font-family: var(--mono); font-weight: 500; color: var(--ink); }
+
+.alt__better {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--ok);
+}
 
 /* ---- PIREP modal content -------------------------------------------------- */
 

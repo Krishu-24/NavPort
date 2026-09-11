@@ -39,6 +39,12 @@
     --warn-wash: #FDF8EE;
     --crit-wash: #FDF3F1;
 
+    /* Flight categories — the standard aviation set, desaturated to match */
+    --vfr:  #256B49;  --vfr-tint:  #E8F2EC;
+    --mvfr: #1B4A7C;  --mvfr-tint: #E9F0F7;
+    --ifr:  #A02A20;  --ifr-tint:  #FBE9E6;
+    --lifr: #6B2E7A;  --lifr-tint: #F5EAF7;
+
     /* ---- Type ---- */
     --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
@@ -97,6 +103,11 @@
     --warn-wash: rgba(228, 182, 103, .07);
     --crit-wash: rgba(236, 138, 128, .08);
 
+    --vfr:  #74C79C;  --vfr-tint:  rgba(116, 199, 156, .14);
+    --mvfr: #7FB3E8;  --mvfr-tint: rgba(127, 179, 232, .14);
+    --ifr:  #EC8A80;  --ifr-tint:  rgba(236, 138, 128, .14);
+    --lifr: #C58BD6;  --lifr-tint: rgba(197, 139, 214, .14);
+
     --paper-veil: rgba(19, 19, 17, .86);
 
     --sh-1: 0 1px 2px rgba(0, 0, 0, .4);
@@ -133,6 +144,11 @@
         --ok-wash:   rgba(116, 199, 156, .07);
         --warn-wash: rgba(228, 182, 103, .07);
         --crit-wash: rgba(236, 138, 128, .08);
+
+        --vfr:  #74C79C;  --vfr-tint:  rgba(116, 199, 156, .14);
+        --mvfr: #7FB3E8;  --mvfr-tint: rgba(127, 179, 232, .14);
+        --ifr:  #EC8A80;  --ifr-tint:  rgba(236, 138, 128, .14);
+        --lifr: #C58BD6;  --lifr-tint: rgba(197, 139, 214, .14);
 
         --paper-veil: rgba(19, 19, 17, .86);
 

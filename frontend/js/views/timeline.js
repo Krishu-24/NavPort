@@ -1,7 +1,7 @@
 /** Interval rows with show/hide raw METAR & TAF panels and PIREP access. */
 
 import { $, el } from '../core/dom.js';
-import { clockOnly, condition, place, round, sev, visibility } from '../core/format.js';
+import { cat, ceiling, clockOnly, condition, place, round, sev, visibility } from '../core/format.js';
 import { openPireps } from './pireps.js';
 
 const CHEV = '<path d="M2.5 4l3.5 3.5L9.5 4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
@@ -47,9 +47,9 @@ function toggle(kind, label, count) {
         dataset: { panel: kind },
         'aria-expanded': 'false',
     },
-        el('svg', { class: 'toggle__chev', viewBox: '0 0 12 12', html: CHEV }),
         label,
         el('span', { class: 'toggle__n' }, String(count)),
+        el('svg', { class: 'toggle__chev', viewBox: '0 0 12 12', html: CHEV }),
     );
 }
 
@@ -63,6 +63,12 @@ function row(item, index) {
     const station = c.nearest_station && c.nearest_station !== 'Unknown' ? c.nearest_station : null;
 
     // Status sits with the location; advisories get their own line below.
+    const fc = cat(item.flight_category);
+    const category = el('span', {
+        class: `cat cat--${fc.key}`,
+        title: `${fc.title} - ceiling ${ceiling(item.ceiling_ft)}`,
+    }, fc.label);
+
     const status = el('span', {
         class: `tag tag--sev tag--${s.key}${s.key === 'crit' ? ' tag--alert' : ''}`,
     }, s.label);
@@ -102,6 +108,7 @@ function row(item, index) {
             el('div', { class: 'tl__body' },
                 el('div', { class: 'tl__head' },
                     el('span', { class: 'tl__loc' }, place(item.location_description) || '—'),
+                    category,
                     status,
                 ),
                 el('div', { class: 'tl__cond' }, condition(c.condition || '')),
@@ -109,6 +116,8 @@ function row(item, index) {
                 c.natural_language ? el('div', { class: 'tl__note' }, c.natural_language) : null,
             ),
             el('div', { class: 'tl__metrics' },
+                metric(item.ceiling_ft === null || item.ceiling_ft === undefined
+                    ? '—' : Math.round(item.ceiling_ft / 100).toString(), 'ceil x100'),
                 metric(visibility(item.visibility), 'sm vis', visTone(item.visibility)),
                 metric(`${Math.round(Number(item.wind_speed) || 0)}${gust ? `G${Math.round(gust)}` : ''}`, 'kt wind'),
             ),

@@ -29,6 +29,11 @@ export function analyzeRoute(plan) {
     });
 }
 
+export function fetchAlternates(icao, { radius = 200, limit = 8 } = {}) {
+    const q = new URLSearchParams({ radius: String(radius), limit: String(limit) });
+    return request(`/api/alternates/${encodeURIComponent(icao)}?${q}`);
+}
+
 export function fetchPireps(station, { raw = false, distance = 150, age = 6 } = {}) {
     const q = new URLSearchParams({ raw: String(raw), distance: String(distance), age: String(age) });
     return request(`/api/pirep-reports/${encodeURIComponent(station)}?${q}`);

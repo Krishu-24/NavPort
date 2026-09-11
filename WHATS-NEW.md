@@ -18,9 +18,14 @@ how it's organised, and how you run it.
 | **Frontend** | One 1,535-line `index.html` with inline CSS + inline JS | 4 stylesheets + 16 ES modules, no build step |
 | **Theme** | Light only, blue gradients | Light **and** dark, with a toggle that remembers your choice |
 | **Typography** | Segoe UI system stack | IBM Plex Sans + IBM Plex Mono |
+| **Airport codes** | Bare ICAO codes | ICAO + IATA + name + city, 34k airports offline |
+| **Density altitude** | — | Computed at both ends, flagged when significant |
+| **Flight rules** | Custom severity only | Standard FAA **VFR / MVFR / IFR / LIFR** per interval |
+| **Diversion planning** | — | Live search for usable alternates near the destination |
+| **Briefing export** | — | Print / save as PDF, laid out as a document |
 | **Route map** | — | Live map with the path drawn in severity colours |
 | **Risk display** | Text banner | Animated arc gauge + severity breakdown |
-| **Startup** | `pip install` then `python app.py`, by hand | Double-click `run.bat` |
+| **Startup** | `pip install` then `python app.py`, by hand | Double-click `run.bat` (Windows) or `run.command` (macOS/Linux) |
 | **Docs** | README only | README + `docs/ARCHITECTURE.md` |
 | **Server console** | Werkzeug's default request log | Live device / traffic telemetry |
 
@@ -67,7 +72,60 @@ one is a designed system rather than a stack of boxes.
 
 ---
 
-## 2. New features
+## 2. Flight categories and diversion planning
+
+The previous version scored weather with its own vocabulary (Clear /
+Significant / Severe). Useful, but not what a pilot plans in. NavPort now
+computes the **standard FAA categories** for every interval and every station:
+
+```
+LIFR   ceiling  < 500 ft   or  visibility < 1 sm
+IFR    ceiling  < 1000 ft  or  visibility < 3 sm
+MVFR   ceiling <= 3000 ft  or  visibility <= 5 sm
+VFR    ceiling  > 3000 ft  and visibility > 5 sm
+```
+
+Ceiling is the lowest broken/overcast/vertical-visibility layer — few and
+scattered layers correctly don't count. The worse of ceiling and visibility
+decides the category. The route headline now reads, for example,
+*"LIFR — 8 of 17 intervals below VFR"*.
+
+And then the question that actually follows a bad forecast: **where do I go
+instead?** `GET /api/alternates/<icao>` searches live METARs around an airport
+and returns usable diversions — no worse than the destination and at least
+MVFR — ranked best-category-first, then nearest, with distance, true bearing,
+compass point, ceiling, visibility and wind for each.
+
+The module also computes headwind/crosswind components for a runway heading,
+exposed via `?runway=` on the same endpoint.
+
+---
+
+## 3. Airport identity and density altitude
+
+**Every code now explains itself.** A bundled, public-domain
+[OurAirports](https://ourairports.com/data/) extract resolves 34,220
+identifiers worldwide to IATA code, airport name, city and country. It is
+indexed by `icao_code`, `gps_code` *and* `ident`, because US fields routinely
+report weather under an identifier that isn't their formal ICAO code — K12N
+and KVES only resolve via the latter two.
+
+The design rule: **the code is the identity, the name is the annotation.**
+Pilots scan and speak in codes, so the code never moves or gets replaced.
+Where a row has room the name sits beside it; where it doesn't, the code
+carries a dotted underline and rolls the meaning down on hover or keyboard
+focus. The database is loaded server-side, so the browser pays nothing for it.
+
+**Density altitude** is now computed for departure and destination from
+temperature, altimeter setting and field elevation — a standard element of an
+FAA preflight briefing, and the number that decides whether the aircraft will
+actually perform. It's flagged when it runs more than 2,000 ft above field
+elevation. Denver on a 30 °C day reads 8,398 ft, nearly 3,000 ft above the
+field.
+
+---
+
+## 4. New features
 
 - **Route map** — Leaflet with keyless Esri basemaps. The flight path is drawn
   segment by segment in its severity colour, with airport markers and
@@ -81,10 +139,15 @@ one is a designed system rather than a stack of boxes.
   codes, with examples and tooltips.
 - **Instant PIREP format switching** — decoded and raw text are fetched in one
   request, so the toggle no longer re-hits the API.
+- **Printable briefing** — a dedicated print stylesheet turns the dashboard
+  into a document: chrome removed, forced light palette, a header with the
+  route and generation time, and no row or card split across a page break.
+- **Recent routes** — the last five routes are kept locally and re-run in one
+  click.
 
 ---
 
-## 3. Live terminal telemetry
+## 5. Live terminal telemetry
 
 The server console now reports who is connected and what is going out, instead
 of Werkzeug's default log line:
@@ -120,7 +183,7 @@ of Werkzeug's default log line:
 
 ---
 
-## 4. Architecture
+## 6. Architecture
 
 **Backend** — one file became a package:
 
@@ -128,7 +191,7 @@ of Werkzeug's default log line:
 backend/
 ├── config.py          # constants, env-driven host/port/debug
 ├── models/pirep.py    # PIREP dataclass + raw-text parsing (no I/O)
-├── services/          # pirep_service · nlp_processor · weather_service
+├── services/          # flight_rules · pirep_service · nlp_processor · weather_service
 ├── routes/            # flight_routes · pirep_routes (thin blueprints)
 └── telemetry.py       # console reporting
 ```
@@ -158,19 +221,23 @@ response shapes, same data sources.
 
 ---
 
-## 5. Running it
+## 7. Running it
 
-`run.bat` — double-click it. It verifies Python is installed, creates a
-virtual environment only if one is missing, installs dependencies only when
-`requirements.txt` has actually changed, and starts the server. Re-running is
-always safe.
+One-click launchers for both platforms: **`run.bat`** on Windows and
+**`run.command`** on macOS/Linux. Each verifies Python 3.9+ is installed,
+creates a virtual environment only if one is missing, installs dependencies
+only when `requirements.txt` has actually changed, and starts the server.
+Re-running is always safe.
+
+A `.gitattributes` pins `*.command` to LF endings, so the macOS launcher can't
+be broken by a CRLF checkout on Windows.
 
 `docs/ARCHITECTURE.md` is new: request flow, module map, and the reasoning
 behind the structure.
 
 ---
 
-## 6. Bugs fixed along the way
+## 8. Bugs fixed along the way
 
 - `main.py` and `app.py` were byte-identical duplicates; one was dead code.
 - A stale `python app.py` process could hold port 5000 and answer requests with
@@ -187,6 +254,16 @@ behind the structure.
 - The backend's raw `->` in leg descriptions leaked into the UI; now `→`.
 - Static-file responses reported `0 B` in telemetry, because
   `calculate_content_length()` returns `None` in direct-passthrough mode.
+- A missing visibility reading rendered as a very alarming `0.00 sm`, because
+  `Number(null)` is `0` and passes an `isFinite` check.
+- With no observation for a destination, the diversion panel claimed `LIFR` —
+  inventing a hazard where it simply had no data. It now says so plainly.
+- The diversion lookup lands right behind the briefing's 7-way concurrent
+  burst and was being throttled to an empty body; one short retry fixes it.
+- Windows lets a second process bind a port that is already being listened on
+  rather than refusing it, so two servers both appeared to start while the OS
+  quietly routed requests to whichever it liked — leaving the visible console
+  silent. Startup now probes the port first and exits with a clear message.
 - Telemetry could raise `UnicodeEncodeError` on Windows, where a redirected
   stdout defaults to cp1252 and cannot encode box-drawing glyphs — which threw
   inside `after_request` and took the response down with it.

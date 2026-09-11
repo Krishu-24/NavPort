@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from threading import Lock
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 # ---------------------------------------------------------------------------
 # ANSI
@@ -327,7 +327,7 @@ TELEMETRY = Telemetry()
 # ---------------------------------------------------------------------------
 
 
-def print_banner(app_name: str, host: str, port: int, lan_ip: Optional[str] = None) -> None:
+def print_banner(app_name: str, host: str, port: int, lan_ips=None) -> None:
     width = min(shutil.get_terminal_size((96, 24)).columns - 2, 68)
     started = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
 
@@ -336,8 +336,14 @@ def print_banner(app_name: str, host: str, port: int, lan_ip: Optional[str] = No
         ('', ''),
         (f"{GREY}Local{RESET}", f"{CYAN}http://127.0.0.1:{port}{RESET}"),
     ]
-    if lan_ip:
-        rows.append((f"{GREY}Network{RESET}", f"{CYAN}http://{lan_ip}:{port}{RESET}"))
+    if isinstance(lan_ips, str):
+        lan_ips = [lan_ips]
+    lan_ips = lan_ips or []
+
+    for i, ip in enumerate(lan_ips):
+        label = 'Network' if i == 0 else ''
+        rows.append((f"{GREY}{label}{RESET}", f"{CYAN}http://{ip}:{port}{RESET}"))
+
     rows.append((f"{GREY}Started{RESET}", f"{GREY}{started}{RESET}"))
 
     print(f"\n{GREY}{G['tl']}{G['h'] * (width - 2)}{G['tr']}{RESET}")
@@ -346,21 +352,47 @@ def print_banner(app_name: str, host: str, port: int, lan_ip: Optional[str] = No
         print(f"{GREY}{G['v']}{RESET} {text}{' ' * max(0, width - 4 - _visible_len(text))} {GREY}{G['v']}{RESET}")
     print(f"{GREY}{G['bl']}{G['h'] * (width - 2)}{G['br']}{RESET}")
 
-    if lan_ip:
-        print(f"{FAINT}  phones and tablets: open http://{lan_ip}:{port} on the same Wi-Fi{RESET}")
+    if lan_ips:
+        print(f"{FAINT}  other devices: use a Network address, on the same network{RESET}")
     print(f"{FAINT}  watching for connections - ctrl+c to stop{RESET}\n", flush=True)
 
 
-def lan_address() -> Optional[str]:
-    """Best-effort LAN IP, without needing a reachable network."""
+def lan_addresses() -> List[str]:
+    """Every IPv4 address this machine answers on, primary route first.
+
+    One address isn't enough: with a mobile hotspot running, the laptop is on
+    two networks at once, and the address other devices need is the hotspot's
+    (typically 192.168.137.1) — not the one carrying the default route.
+    """
     import socket
+
+    found: List[str] = []
+
+    # The default-route address, via a UDP socket that never sends anything.
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.settimeout(0.2)
             s.connect(('10.255.255.255', 1))
-            return s.getsockname()[0]
+            found.append(s.getsockname()[0])
     except Exception:
-        return None
+        pass
+
+    # Everything else bound to this host.
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            address = info[4][0]
+            if address not in found and not address.startswith(('127.', '169.254.')):
+                found.append(address)
+    except Exception:
+        pass
+
+    return found
+
+
+def lan_address() -> Optional[str]:
+    """Primary LAN IP, or None when the machine has no network address."""
+    addresses = lan_addresses()
+    return addresses[0] if addresses else None
 
 
 # ---------------------------------------------------------------------------

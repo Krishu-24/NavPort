@@ -3,13 +3,14 @@
  * Loaded as an ES module — every unit below is an explicit import, no globals.
  */
 
-import { $ } from './core/dom.js';
-import { defaultDeparture } from './core/format.js';
+import { $, show } from './core/dom.js';
+import { defaultDeparture, flightTime } from './core/format.js';
 import { analyzeRoute } from './core/api.js';
 import { getState, setState } from './core/state.js';
 
 import { initRail, setBusy, setView, startClock } from './ui/shell.js';
 import { initTheme } from './ui/theme.js';
+import { initRecent, remember } from './ui/recent.js';
 import { toast } from './ui/toast.js';
 
 import { renderOverview } from './views/overview.js';
@@ -17,6 +18,9 @@ import { renderBriefing, renderRisk } from './views/risk.js';
 import { initRibbonLink, renderRibbon } from './views/ribbon.js';
 import { renderCharts } from './views/charts.js';
 import { renderMap, retintMap } from './views/map.js';
+import { renderAlternates, resetAlternates } from './views/alternates.js';
+import { renderAirfields } from './views/airfields.js';
+import { loadIdentities } from './core/idents.js';
 import { renderNotams } from './views/notams.js';
 import { initTimeline, renderTimeline } from './views/timeline.js';
 import { initPirepModal } from './views/pireps.js';
@@ -34,16 +38,39 @@ function readPlan() {
 
 /** Paint every view from one payload. Order matters only for the map re-measure. */
 function renderAll(data) {
+    // Identities first — every view below renders codes through them.
+    loadIdentities(data.airports);
+
     renderOverview(data);
     renderRisk(data);
     renderBriefing(data);
     renderRibbon(data);
     renderNotams(data);
+    renderAirfields(data);
     renderTimeline(data);
+
+    renderPrintHeader(data);
 
     setView('results');       // map + charts need a laid-out container
     renderCharts(data);
     renderMap(data);
+    renderAlternates(data);   // fires its own request, paints when it lands
+    show($('#print-btn'), true);
+}
+
+/** Only visible on paper — identifies the briefing and when it was pulled. */
+function renderPrintHeader(data) {
+    const r = data.route || {};
+    const via = r.waypoints?.length ? ` via ${r.waypoints.join(' ')}` : '';
+    $('#print-route').textContent = `${r.departure} → ${r.destination}${via}`;
+
+    $('#print-meta').textContent = [
+        `${Math.round(r.total_distance)} nm`,
+        flightTime(r.total_flight_time),
+        `${r.cruise_speed} kts`,
+        `Worst on route: ${r.flight_category}`,
+        `Generated ${new Date().toUTCString()}`,
+    ].join('  ·  ');
 }
 
 async function analyze(event) {
@@ -65,11 +92,13 @@ async function analyze(event) {
     setState({ loading: true });
     setBusy(true);
     setView('loading');
+    resetAlternates();
 
     try {
         const data = await analyzeRoute(plan);
         setState({ briefing: data, loading: false });
         renderAll(data);
+        remember(plan);
 
         const severe = data.risk_assessment?.severe_segments || 0;
         toast(
@@ -99,6 +128,15 @@ function boot() {
     initPirepModal();
 
     $('#plan-form').addEventListener('submit', analyze);
+    $('#print-btn').addEventListener('click', () => window.print());
+
+    initRecent((route) => {
+        $('#departure').value = route.departure;
+        $('#destination').value = route.destination;
+        $('#waypoints').value = (route.waypoints || []).join(', ');
+        if (route.cruiseSpeed) $('#cruise-speed').value = route.cruiseSpeed;
+        analyze();
+    });
 
     // Canvas and map tiles can't inherit CSS variables — repaint them by hand.
     window.addEventListener('themechange', () => {

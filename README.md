@@ -7,19 +7,29 @@ plain-English briefing with an automated risk assessment.
 
 ## How to Run
 
-### Windows — one-click
+### One-click
 
-Double-click **[`run.bat`](run.bat)**. It will:
+| Platform | Double-click |
+|---|---|
+| Windows | **[`run.bat`](run.bat)** |
+| macOS / Linux | **[`run.command`](run.command)** |
 
-1. Check that Python is installed (and tell you where to get it if not).
+Either one will:
+
+1. Check that Python 3.9+ is installed (and tell you where to get it if not).
 2. Create a virtual environment in `.venv/` — skipped if one already exists.
 3. Install dependencies from `requirements.txt` — skipped if they're already
    up to date.
 4. Start the server and print `http://localhost:5000`.
 
-Re-running `run.bat` any time (including after a fresh `git pull`) is safe —
-it only re-installs dependencies when `requirements.txt` has actually
-changed, and never re-creates an existing virtual environment.
+Re-running is always safe, including after a fresh `git pull` — dependencies
+are only re-installed when `requirements.txt` has actually changed, and an
+existing virtual environment is never re-created.
+
+> **macOS first run:** if double-clicking opens the file in a text editor
+> instead of running it, make it executable once with
+> `chmod +x run.command`. From a terminal you can also just run
+> `./run.command`.
 
 ### Manual setup (Windows / macOS / Linux)
 
@@ -52,6 +62,10 @@ Then open **http://localhost:5000**.
 
 | Capability | Details |
 |---|---|
+| **Airport identity** | Every ICAO code resolves to its IATA code, airport name, city and country — 34,000 airports worldwide, bundled offline. Hover any code to roll down its meaning |
+| **Density altitude** | Pressure and density altitude at both ends, flagged when it runs more than 2,000 ft above field elevation — a standard FAA briefing element |
+| **Flight categories** | Standard FAA **VFR / MVFR / IFR / LIFR** for every interval, derived from ceiling and visibility — the language pilots actually plan in |
+| **Diversion planning** | Nearby airports that are usable alternates for your destination, ranked by distance with ceiling, visibility, wind and bearing |
 | **Route weather timeline** | 15-minute interval breakdown of the whole route, with severity (Clear / Significant / Severe) per segment |
 | **Live aviation data** | METAR, TAF, PIREP, SIGMET, G-AIRMET, CWA — fetched concurrently from aviationweather.gov |
 | **NOTAMs** | Time-appropriate NOTAM cards per airport (see [Data Sources](#data-sources) — currently simulated demo data) |
@@ -62,7 +76,9 @@ Then open **http://localhost:5000**.
 | **Route map** | Live map with the flight path drawn segment-by-segment in its severity colour, airport markers and per-interval condition popups |
 | **Severity ribbon** | Scrubbable strip of the entire route — hover to highlight, click to jump to that interval |
 | **Charts** | Wind (sustained + gusts) and visibility, colour-banded by aviation minimums |
-| **Responsive dashboard UI** | Dark flight-deck theme, animated risk gauge, skeleton loading states, off-canvas flight plan on mobile |
+| **Printable briefing** | Print or save the whole briefing as a PDF, laid out as a document with a header and no page-split rows |
+| **Recent routes** | The last five routes you analysed, one click to re-run |
+| **Responsive dashboard UI** | Light and dark themes, animated risk gauge, skeleton loading states, off-canvas flight plan on mobile |
 
 ## Architecture at a Glance
 
@@ -82,22 +98,25 @@ Full request flow, module responsibilities and design rationale are in
 ```
 NavPort/
 ├── run.bat                    # Windows one-click launcher
+├── run.command                # macOS / Linux one-click launcher
 ├── run.py                     # Entry point (python run.py)
 ├── requirements.txt
+├── WHATS-NEW.md               # What changed from the previous version
 ├── backend/
 │   ├── __init__.py            # Flask app factory
 │   ├── config.py              # Constants & lookup tables
+│   ├── telemetry.py           # Live console device/traffic reporting
 │   ├── models/pirep.py        # PIREP dataclass + raw-text parsing
-│   ├── services/               # PIREP fetch, NLP, weather aggregation
-│   └── routes/                 # /api/* Flask blueprints
+│   ├── services/              # flight_rules · pirep · nlp · weather
+│   └── routes/                # /api/* Flask blueprints
 ├── frontend/
 │   ├── index.html
-│   ├── css/                    # tokens · layout · components · dashboard
+│   ├── css/                   # tokens · layout · components · dashboard · print
 │   ├── js/
-│   │   ├── main.js             # ES module entry point
-│   │   ├── core/               # api · state · dom · format
-│   │   ├── ui/                 # shell · toast
-│   │   └── views/              # overview · risk · ribbon · map · charts · notams · timeline · pireps
+│   │   ├── main.js            # ES module entry point
+│   │   ├── core/              # api · state · dom · format
+│   │   ├── ui/                # shell · theme · recent · toast
+│   │   └── views/             # overview · risk · ribbon · map · charts · notams · timeline · alternates · pireps
 │   └── assets/icon.png
 └── docs/
     └── ARCHITECTURE.md
@@ -111,18 +130,23 @@ NavPort/
 | `POST` | `/api/enhanced-flight-plan` | Full route analysis: weather timeline, NOTAMs, risk assessment, briefing |
 | `POST` | `/api/process-natural-language` | Extracts departure/destination/waypoints/speed from free text |
 | `GET` | `/api/pirep-reports/<station_id>` | PIREPs near a station (`?distance=`, `?age=`, `?raw=true\|false`) |
+| `GET` | `/api/airports` | Resolve identifiers to IATA + name (`?codes=KJFK,EGLL`) |
+| `GET` | `/api/alternates/<icao>` | Usable diversion airports near an airport (`?radius=`, `?limit=`, `?runway=`) |
 
 ## Technology Stack
 
 **Backend:** Flask, `requests`, `concurrent.futures` for parallel API calls,
-regex-based NLP (no external ML/LLM dependency).
+regex-based NLP and a pure-Python flight-rules engine (no external ML/LLM
+dependency, no extra packages beyond `requirements.txt`).
 
 **Frontend:** Native ES modules — no bundler, no build step, no framework
 runtime. Chart.js for the wind/visibility plots, Leaflet for the route map,
-Inter + JetBrains Mono via Google Fonts. Dark "glass cockpit" theme driven by
-CSS custom properties.
+IBM Plex Sans + IBM Plex Mono via Google Fonts. Light and dark themes driven
+entirely by CSS custom properties.
 
-**Data:** [Aviation Weather Center](https://aviationweather.gov) public API.
+**Data:** [Aviation Weather Center](https://aviationweather.gov) public API for
+weather; [OurAirports](https://ourairports.com/data/) (public domain) for the
+bundled worldwide airport database.
 
 ## Data Sources
 

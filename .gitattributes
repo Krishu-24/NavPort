@@ -1,0 +1,13 @@
+# Shell launchers must stay LF — a CRLF shebang makes macOS/Linux fail with
+# "bad interpreter: /usr/bin/env bash^M".
+*.command  text eol=lf
+*.sh       text eol=lf
+
+# Batch files are the opposite: cmd.exe wants CRLF.
+*.bat      text eol=crlf
+
+# Don't let line-ending conversion touch binaries.
+*.png      binary
+*.ico      binary
+*.jpg      binary
+*.gz       binary

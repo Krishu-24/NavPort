@@ -5,10 +5,47 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
+from backend.services import airports, flight_rules
 from backend.services.weather_service import WeatherProcessor
 
 flight_bp = Blueprint('flight', __name__, url_prefix='/api')
 weather_processor = WeatherProcessor()
+
+
+@flight_bp.route('/airports', methods=['GET'])
+def airport_lookup():
+    """Resolve identifiers to IATA codes and names: ?codes=KJFK,EGLL"""
+    codes = [c for c in (request.args.get('codes', '')).replace(' ', '').split(',') if c]
+    if not codes:
+        return jsonify({'error': 'Pass ?codes=KJFK,EGLL'}), 400
+    if len(codes) > 200:
+        return jsonify({'error': 'At most 200 codes per request'}), 400
+
+    return jsonify({'airports': airports.describe_many(codes), 'known': airports.count()})
+
+
+@flight_bp.route('/alternates/<icao>', methods=['GET'])
+def alternates(icao):
+    """Nearby airports reporting better conditions — diversion planning."""
+    try:
+        radius = max(25, min(400, int(request.args.get('radius', 200))))
+        limit = max(1, min(20, int(request.args.get('limit', 8))))
+        heading = request.args.get('runway')
+        runway_heading = float(heading) if heading not in (None, '') else None
+
+        result = weather_processor.find_alternates(
+            icao.upper(), radius_nm=radius, limit=limit, runway_heading=runway_heading)
+
+        if 'error' in result:
+            return jsonify(result), 404
+
+        return jsonify(result)
+
+    except ValueError:
+        return jsonify({'error': 'radius, limit and runway must be numbers'}), 400
+    except Exception as e:
+        logging.error(f"Error finding alternates: {e}")
+        return jsonify({'error': f'Failed to find alternates: {str(e)}'}), 500
 
 
 @flight_bp.route('/process-natural-language', methods=['POST'])
@@ -78,6 +115,26 @@ def enhanced_flight_plan():
         elif 'Significant' in severities:
             overall_severity = 'Significant'
 
+        # Worst flight category anywhere on the route, plus a per-category count
+        # so the UI can say "3 intervals IFR or below".
+        categories = [item.get('flight_category', 'VFR') for item in timeline]
+        worst_category = flight_rules.worst(categories)
+        category_counts = {name: categories.count(name) for name in flight_rules.CATEGORIES}
+        below_vfr = sum(count for name, count in category_counts.items() if name != 'VFR')
+
+        # Identity for every code the briefing mentions, so the UI can show
+        # names and IATA codes without a second round trip per station.
+        mentioned = {departure, destination, *waypoints}
+        mentioned.update(
+            item['conditions'].get('nearest_station')
+            for item in timeline
+            if item['conditions'].get('nearest_station') not in (None, 'Unknown')
+        )
+        mentioned.update(n.get('airport') for n in weather_data.get('notams', []) if n.get('airport'))
+        identities = airports.describe_many([c for c in mentioned if c])
+
+        airfields = weather_processor.airfield_reports([departure, destination])
+
         weather_briefing_summary = weather_processor.nlp_processor.summarize_weather_briefing(weather_data)
         risk_assessment = weather_processor.nlp_processor.generate_risk_assessment(timeline)
 
@@ -90,6 +147,9 @@ def enhanced_flight_plan():
                 'total_distance': sum(s['distance_nm'] for s in flight_segments),
                 'total_flight_time': sum(s['flight_time_hours'] for s in flight_segments),
                 'overall_severity': overall_severity,
+                'flight_category': worst_category,
+                'category_counts': category_counts,
+                'intervals_below_vfr': below_vfr,
                 'risk_assessment': risk_assessment,
             },
             'flight_segments': [{
@@ -111,6 +171,8 @@ def enhanced_flight_plan():
                 'notams_count': len(weather_data.get('notams', [])),
             },
             'notams': weather_data.get('notams', []),
+            'airports': identities,
+            'airfields': airfields,
             'nlp_briefing_summary': weather_briefing_summary,
             'risk_assessment': risk_assessment,
         })

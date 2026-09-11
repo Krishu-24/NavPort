@@ -53,6 +53,30 @@
 
 .plan .eyebrow { margin-bottom: calc(var(--s1) * -1); }
 
+.recent { display: flex; flex-direction: column; gap: var(--s2); }
+
+.recent__list { display: flex; flex-direction: column; gap: 4px; }
+
+.recent__item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 8px;
+    border-radius: var(--r-sm);
+    border: 1px solid transparent;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-2);
+    text-align: left;
+    transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+
+.recent__item:hover { background: var(--surface-2); border-color: var(--line-soft); color: var(--ink); }
+
+.recent__code { font-weight: 600; letter-spacing: .04em; }
+.recent__arrow { color: var(--ink-4); }
+.recent__via { margin-left: auto; font-size: 10px; color: var(--ink-4); }
+
 .rail__foot {
     margin-top: auto;
     padding-top: var(--s4);

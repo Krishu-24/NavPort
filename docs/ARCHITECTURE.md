@@ -64,22 +64,26 @@ NavPort/
 ├── backend/
 │   ├── __init__.py            # App factory: static file serving, CORS, blueprints
 │   ├── config.py              # Constants: API base URL, host/port, lookup tables
+│   ├── data/airports.json.gz  # OurAirports extract (public domain), 34k identifiers
 │   │
 │   ├── models/
 │   │   └── pirep.py           # PIREP dataclass + raw-text parsing/formatting
 │   │
 │   ├── services/
+│   │   ├── flight_rules.py    # FAA categories, wind components, bearings (pure)
 │   │   ├── pirep_service.py   # Fetches & parses PIREPs for a single station
 │   │   ├── nlp_processor.py   # METAR decoding, briefing text, risk scoring
-│   │   └── weather_service.py # Flight path calc, concurrent data fetch, timeline
+│   │   └── weather_service.py # Flight path calc, concurrent fetch, timeline, alternates
 │   │
-│   └── routes/
-│       ├── flight_routes.py   # /api/enhanced-flight-plan, /api/process-natural-language
-│       └── pirep_routes.py    # /api/pirep-reports/<station_id>
+│   ├── routes/
+│   │   ├── flight_routes.py   # /api/enhanced-flight-plan, /api/alternates, /api/process-natural-language
+│   │   └── pirep_routes.py    # /api/pirep-reports/<station_id>
+│   └── telemetry.py           # Live console reporting
 │
 ├── frontend/
 │   ├── index.html             # Dashboard shell (rail + card grid)
 │   ├── css/
+│   │   ├── print.css          # Print / save-as-PDF layout
 │   │   ├── tokens.css         # Design tokens, reset, base type, keyframes
 │   │   ├── layout.css         # Shell: rail, topbar, content grid, responsive
 │   │   ├── components.css     # Buttons, fields, cards, pills, modal, toasts
@@ -93,6 +97,8 @@ NavPort/
 │   │   │   └── format.js      # Severity vocabulary, time & unit formatting
 │   │   ├── ui/
 │   │   │   ├── shell.js       # UTC clock, off-canvas rail, view switching
+│   │   │   ├── theme.js       # Light/dark switching + repaint broadcast
+│   │   │   ├── recent.js      # Recently analysed routes
 │   │   │   └── toast.js       # Corner notifications
 │   │   └── views/
 │   │       ├── overview.js    # Route chip + KPI tiles
@@ -102,6 +108,7 @@ NavPort/
 │   │       ├── charts.js      # Chart.js wind + visibility
 │   │       ├── notams.js      # NOTAM cards
 │   │       ├── timeline.js    # Interval rows + raw METAR/TAF panels
+│   │       ├── alternates.js  # Diversion options
 │   │       └── pireps.js      # Pilot-report modal
 │   └── assets/icon.png
 │
