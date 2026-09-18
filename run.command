@@ -83,6 +83,15 @@ fi
 say ""
 
 # ---- 4. Start the server ---------------------------------------------
+# Opt in to development mode explicitly. Every default in backend/config.py is
+# the production-safe one, so forgetting to set anything can never be what
+# leaves the debugger exposed. This is the one place that relaxes it:
+# auto-reload, console telemetry, and binding to the LAN so a phone on the
+# same network can open the dashboard.
+export NAVPORT_ENV=development
+export NAVPORT_DEBUG=true
+export NAVPORT_HOST=0.0.0.0
+
 say "${BOLD}================================================${RESET}"
 say "${BOLD}  Starting NavPort on http://localhost:5000${RESET}"
 say "${BOLD}  Press CTRL+C to stop the server.${RESET}"

@@ -47,29 +47,66 @@ export const cssVar = (name) =>
  * leave entrance animations stuck on their starting values.
  */
 export function nextFrame(fn) {
-    if (document.hidden) fn();
-    else requestAnimationFrame(fn);
+    if (document.hidden) { fn(); return; }
+
+    let ran = false;
+    const once = () => { if (!ran) { ran = true; fn(); } };
+
+    requestAnimationFrame(once);
+
+    // Same hazard as animateNumber: a page can report itself visible and still
+    // never be handed a frame, which would strand whatever `fn` sets on its
+    // starting value — here, a risk gauge stuck reading empty while the figure
+    // beside it says 80%. Timers still run in that state. At 50ms a real frame
+    // (~16ms) wins the race comfortably, so the transition still animates
+    // wherever the page is genuinely painting.
+    setTimeout(once, 50);
 }
 
 /** Count a number up to its final value — small touch, big perceived polish. */
 export function animateNumber(node, to, { duration = 900, decimals = 0 } = {}) {
+    const settle = () => { node.textContent = to.toFixed(decimals); };
+
+    // Publish the destination up front. Mid-tween, `textContent` is a lie —
+    // anything reading the node before the count-up lands sees a partial
+    // figure, and code that reads it at the wrong moment gets "0". The target
+    // is known immediately, so expose it immediately and let readers ask for
+    // the value rather than race the animation for it.
+    const host = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    if (host) host.dataset.value = to.toFixed(decimals);
+
     const skip = document.hidden
         || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (skip) {
-        node.textContent = to.toFixed(decimals);
+        settle();
         return;
     }
 
     const from = 0;
     const start = performance.now();
+    let finished = false;
 
     const step = (now) => {
+        if (finished) return;
         const p = Math.min(1, (now - start) / duration);
         const eased = 1 - Math.pow(1 - p, 3);
         node.textContent = (from + (to - from) * eased).toFixed(decimals);
         if (p < 1) requestAnimationFrame(step);
+        else finished = true;
     };
 
     requestAnimationFrame(step);
+
+    // The count-up is decoration; the number itself is data, and it must be
+    // right whether or not frames ever arrive. A page can report itself
+    // visible and still be starved of rAF — a background or occluded tab, an
+    // offscreen iframe, an embedded webview — which used to leave the value
+    // frozen at 0 for good. Timers keep running in those states, so this
+    // guarantees the final figure lands on time either way.
+    setTimeout(() => {
+        if (finished) return;
+        finished = true;
+        settle();
+    }, duration);
 }

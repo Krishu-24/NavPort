@@ -20,7 +20,8 @@ from typing import Dict, List, Optional
 DATA_FILE = Path(__file__).resolve().parent.parent / 'data' / 'airports.json.gz'
 
 # Stored positionally to keep the bundled file small.
-_NAME, _IATA, _CITY, _COUNTRY, _KIND, _ELEV = range(6)
+# Regenerate with `python scripts/build_airport_db.py` if this layout changes.
+_NAME, _IATA, _CITY, _COUNTRY, _KIND, _ELEV, _LAT, _LON = range(8)
 
 KIND_LABELS = {
     'L': 'Large airport',
@@ -66,6 +67,27 @@ def lookup(code: Optional[str]) -> Optional[Dict]:
         'country': row[_COUNTRY] or None,
         'kind': KIND_LABELS.get(row[_KIND], 'Airport'),
         'elevation_ft': row[_ELEV],
+    }
+
+
+def coordinates(code: Optional[str]) -> Optional[Dict]:
+    """Position of an airport, or None when the identifier is unknown.
+
+    This is what lets a briefing be planned without a network round trip per
+    airport: the bundled database already knows where everything is, so
+    `stationinfo` is only consulted for identifiers it doesn't carry.
+    """
+    if not code:
+        return None
+
+    row = _AIRPORTS.get(str(code).strip().upper())
+    if not row or len(row) <= _LON:
+        return None
+
+    return {
+        'lat': row[_LAT],
+        'lon': row[_LON],
+        'name': row[_NAME],
     }
 
 

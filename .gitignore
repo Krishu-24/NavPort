@@ -2,17 +2,30 @@
 __pycache__/
 *.pyc
 *.pyo
+.ruff_cache/
+.pytest_cache/
 
 # Virtual environment (created by run.bat)
 .venv/
 venv/
 
+# Secrets and local env — copy from .env.example, never commit the real file
+.env
+.env.local
+.env.*.local
+
 # Logs
 *.log
+*.err
 
 # Editor / OS
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
-*.err
+
+# Node (Tauri CLI under desktop/; also if someone runs npm at the repo root)
+node_modules/
+
+# Scratch UI experiments — not part of the deployable app
+ui_ideas/

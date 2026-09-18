@@ -1,0 +1,453 @@
+/* ==========================================================================
+   NavPort · Platform compatibility
+
+   Loaded last, so it can correct the base styles for the environments they
+   weren't written for: phones with a notch, touch screens with no pointer,
+   and the native app shells where there is no browser chrome to sit under.
+
+   Everything here is conditional. On a desktop browser this file changes
+   almost nothing.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Viewport height on mobile browsers
+
+   `100vh` on iOS Safari and Chrome Android means the viewport with the
+   address bar *hidden*, so a `100vh` element is taller than what you can see
+   and the page scrolls by the height of the toolbar. `100dvh` is the height
+   actually available right now, and it updates as the toolbar collapses.
+   The `100vh` declaration stays first as the fallback for older engines.
+   -------------------------------------------------------------------------- */
+
+.shell {
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
+.rail {
+    height: 100vh;
+    height: 100dvh;
+}
+
+/* --------------------------------------------------------------------------
+   2. Safe areas — notches, rounded corners, the home indicator
+
+   `viewport-fit=cover` in the <meta> lets the page paint edge to edge; these
+   insets are what stop content landing underneath the hardware. They resolve
+   to 0px everywhere that has no notch, so this is unconditional.
+   -------------------------------------------------------------------------- */
+
+.topbar {
+    /* The status bar overlays the top of the page in an installed app, so the
+       topbar has to grow to keep its content below it rather than just being
+       pushed down. */
+    padding-top: env(safe-area-inset-top);
+    height: calc(var(--topbar-h) + env(safe-area-inset-top));
+    padding-left: max(var(--gutter), env(safe-area-inset-left));
+    padding-right: max(var(--gutter), env(safe-area-inset-right));
+}
+
+.content {
+    padding-left: max(var(--gutter), env(safe-area-inset-left));
+    padding-right: max(var(--gutter), env(safe-area-inset-right));
+    /* Clear the home indicator, which sits over the bottom of the screen. */
+    padding-bottom: calc(var(--s8) + env(safe-area-inset-bottom));
+}
+
+.rail {
+    padding-top: max(var(--s5), env(safe-area-inset-top));
+    padding-bottom: calc(var(--s4) + env(safe-area-inset-bottom));
+    padding-left: max(var(--s5), env(safe-area-inset-left));
+}
+
+.toasts {
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-right: max(0px, env(safe-area-inset-right));
+}
+
+.modal__panel {
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* --------------------------------------------------------------------------
+   3. Touch targets
+
+   `pointer: coarse` is true for fingers and styluses. The base control sizes
+   are tuned for a mouse — a 28px icon button is comfortable with a cursor and
+   genuinely hard to hit with a thumb. Both Apple and Google put the minimum
+   at around 44px, so on touch the controls grow. Nothing changes for mouse
+   users.
+   -------------------------------------------------------------------------- */
+
+@media (pointer: coarse) {
+    /* `flex: none` matters as much as the size here. These buttons sit in the
+       topbar's flex row, and a flex item will shrink below its own `width`
+       when the row runs out of space — which on a 393px phone squeezed the
+       menu button to 20px wide while it still reported a 44px height. */
+    .icon-btn {
+        width: 44px;
+        height: 44px;
+        flex: none;
+    }
+
+    .icon-btn svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    /* Leaflet ships 30px controls. Its markup is fixed, but the sizing is
+       not, and zoom is the one map control that gets used on a phone. */
+    .leaflet-touch .leaflet-bar a,
+    .leaflet-control-zoom a {
+        width: 44px;
+        height: 44px;
+        line-height: 44px;
+    }
+
+    .btn {
+        height: 44px;
+        padding: 0 var(--s4);
+    }
+
+    .btn--primary {
+        height: 48px;
+    }
+
+    .seg__btn {
+        min-height: 40px;
+        padding: 8px 14px;
+    }
+
+    /* The recent-routes rows are a list of tap targets. */
+    .recent__item {
+        min-height: 44px;
+        padding: 10px 10px;
+    }
+
+    /* Expand the hit area of the theme switch without changing how it looks. */
+    .theme-toggle {
+        position: relative;
+    }
+
+    .theme-toggle::after {
+        content: '';
+        position: absolute;
+        inset: -10px;
+    }
+
+    /* Airport codes are inline annotations that reveal the field's full name.
+       Giving them a real 44px box would space out every line of text they sit
+       in, so the box stays put and an invisible overlay does the work. The
+       overlay laps a few pixels over the top of the popover it opens, which
+       is fine — the popover is read, not clicked. */
+    .ident::after {
+        content: '';
+        position: absolute;
+        inset: -11px -7px;
+    }
+
+    /* Interval rows and ribbon cells are tapped to expand. */
+    .toggle,
+    .tl__head {
+        min-height: 44px;
+    }
+
+    /* The severity ribbon is one bar per 15-minute interval, so its width is
+       set by the length of the route and cannot be widened without dropping
+       intervals. Its height is free, though, so the bars get the full 44px
+       vertically. A mis-tap selects the neighbouring interval, which is
+       visible immediately and costs nothing — and at 31x44 the bars are
+       comfortably past the 24px floor WCAG 2.5.8 sets for adjacent targets. */
+    .ribbon {
+        height: 44px;
+    }
+}
+
+/* --------------------------------------------------------------------------
+   4. Form fields on iOS
+
+   Safari zooms the whole page in when a focused input's font-size is under
+   16px, and does not zoom back out afterwards. Raising the fields to 16px on
+   touch devices is the only reliable way to prevent it — `maximum-scale=1` in
+   the viewport would also work but disables pinch-zoom, which breaks the page
+   for anyone who needs to magnify it.
+   -------------------------------------------------------------------------- */
+
+@media (pointer: coarse) {
+    .input,
+    .input--icao,
+    .input--mono,
+    select,
+    textarea {
+        font-size: 16px;
+        height: 46px;
+    }
+
+    .input--icao {
+        /* Tracking that looks right at 14px is too loose at 16px. */
+        letter-spacing: .04em;
+    }
+}
+
+/* --------------------------------------------------------------------------
+   5. Hover on touch screens
+
+   A touch browser fires `:hover` on tap and then leaves it applied until you
+   tap somewhere else, so every button you press stays visibly highlighted.
+   `hover: none` matches devices with no hovering pointer, and resetting the
+   hover states there is what keeps the UI from looking stuck.
+
+   `:active` is left alone — that is the correct feedback for a tap.
+   -------------------------------------------------------------------------- */
+
+@media (hover: none) {
+    .btn:hover {
+        background: var(--surface);
+        border-color: var(--line);
+    }
+
+    .btn--primary:hover {
+        background: var(--ink);
+        border-color: var(--ink);
+    }
+
+    .icon-btn:hover {
+        background: transparent;
+        color: var(--ink-3);
+    }
+
+    .input:hover {
+        border-color: var(--line);
+    }
+
+    .recent__item:hover {
+        background: transparent;
+        border-color: transparent;
+        color: var(--ink-2);
+    }
+
+    .seg__btn:hover {
+        color: var(--ink-3);
+    }
+
+    .seg__btn.is-active:hover {
+        color: var(--ink);
+    }
+
+    /* Give a tap some feedback, since there is no hover to rely on. */
+    .btn:active,
+    .icon-btn:active,
+    .recent__item:active {
+        opacity: .7;
+    }
+}
+
+/* --------------------------------------------------------------------------
+   6. Touch behaviour
+   -------------------------------------------------------------------------- */
+
+html {
+    /* iOS enlarges text in landscape unless told not to. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    /* Stops the rubber-band scroll that reveals a blank area beyond the page,
+       and suppresses pull-to-refresh — which otherwise reloads the app mid
+       scroll and throws away the briefing on screen. */
+    overscroll-behavior-y: none;
+}
+
+/* The grey flash Android draws over a tapped element. `:active` styles above
+   replace it with something that matches the design. */
+a, button, .btn, .icon-btn, .recent__item, .seg__btn, .toggle {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Let the map own its gestures. Without this, a pinch or drag on the map
+   scrolls the page instead of panning and zooming. */
+.map {
+    touch-action: none;
+}
+
+/* Horizontally scrollable strips should feel native and not fight the page's
+   vertical scroll. */
+.ribbon,
+.table-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+}
+
+/* Text stays selectable, but chrome shouldn't be — a long-press on a button
+   otherwise pops up the selection handles. */
+.brand, .topbar, .rail__foot, .legend, .icon-btn, .btn, .seg__btn {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* --------------------------------------------------------------------------
+   7. Connection banner
+
+   Injected by js/ui/offline.js. It is deliberately loud: the dashboard keeps
+   showing the last briefing when the network drops, and that briefing is now
+   of unknown age.
+   -------------------------------------------------------------------------- */
+
+.conn {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s2);
+    padding: calc(8px + env(safe-area-inset-top)) var(--s4) 8px;
+    font-size: 12.5px;
+    font-weight: 500;
+    text-align: center;
+    animation: rise .2s var(--ease) both;
+}
+
+.conn[hidden] {
+    display: none;
+}
+
+.conn--off {
+    background: var(--crit-tint, #FDECEC);
+    color: var(--crit, #A4281F);
+    border-bottom: 1px solid var(--crit, #A4281F);
+}
+
+.conn--on {
+    background: var(--ok-tint, #E8F3EC);
+    color: var(--ok, #1F6B3A);
+    border-bottom: 1px solid var(--ok, #1F6B3A);
+}
+
+/* Push the sticky topbar clear of the banner so it doesn't cover it. */
+body.is-offline .topbar {
+    top: 36px;
+}
+
+/* --------------------------------------------------------------------------
+   8. Native app shells
+
+   Inside Tauri and Capacitor there is no browser chrome, so the window has
+   no title bar to drag and no back button. `IS_NATIVE_SHELL` in config.js
+   sets this class on <html>.
+   -------------------------------------------------------------------------- */
+
+html.is-native .topbar {
+    /* Tauri's window-controls-overlay leaves the top strip to the OS buttons,
+       and this makes the rest of the bar draggable like a real title bar. */
+    -webkit-app-region: drag;
+    app-region: drag;
+}
+
+html.is-native .topbar button,
+html.is-native .topbar .clock,
+html.is-native .topbar .route-chip {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+}
+
+/* --------------------------------------------------------------------------
+   9. Installed / standalone display
+
+   With no address bar the app is flush to the top of the screen, which looks
+   cramped without a little more breathing room.
+   -------------------------------------------------------------------------- */
+
+@media (display-mode: standalone), (display-mode: window-controls-overlay) {
+    .topbar {
+        height: calc(var(--topbar-h) + env(safe-area-inset-top) + 4px);
+    }
+}
+
+/* --------------------------------------------------------------------------
+   10. Accessibility
+
+   The JS honours prefers-reduced-motion for counters and entrance animations;
+   this covers everything driven purely by CSS, including the radar sweep on
+   the empty state, which loops forever.
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .radar__sweep,
+    .scanline {
+        display: none;
+    }
+}
+
+/* Visible keyboard focus. Mouse and touch users don't see these; anyone
+   tabbing through the form depends on them entirely. */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--r-sm);
+}
+
+.input:focus-visible {
+    outline: none; /* .input:focus already draws a ring */
+}
+
+@media (prefers-contrast: more) {
+    :root {
+        --line: var(--ink-3);
+        --line-soft: var(--ink-3);
+    }
+}
+
+/* --------------------------------------------------------------------------
+   11. Very small screens
+
+   Below ~380px — an iPhone SE, or a phone with display zoom turned on — the
+   two-column ICAO pair stops fitting.
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 380px) {
+    .pair {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .topbar {
+        gap: var(--s2);
+    }
+
+    .clock__label {
+        display: none;
+    }
+
+    .stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Landscape on a phone leaves very little vertical room, so the tall empty
+   state and the map both need to give some back. */
+@media (max-height: 480px) and (orientation: landscape) {
+    .empty {
+        padding: var(--s4) 0;
+    }
+
+    .radar {
+        width: 96px;
+        height: 96px;
+    }
+
+    .map {
+        height: 240px;
+    }
+}

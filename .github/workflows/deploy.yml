@@ -1,0 +1,171 @@
+name: Deploy
+
+# Publishes the container image to GitHub Container Registry, then optionally
+# rolls it out to Azure Container Apps.
+#
+# ghcr.io rather than Azure Container Registry because ACR has no free tier
+# (~$5/month for Basic) while ghcr.io is free and unlimited for public images.
+# See docs/DEPLOYMENT.md.
+
+on:
+  push:
+    branches: [main, master]
+    # Documentation changes don't need a deploy.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'desktop/**'
+      - 'ui_ideas/**'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false      # never interrupt a rollout mid-flight
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  publish:
+    name: Build and publish the image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # Lets the build publish a signed provenance attestation, so the image
+      # can be traced back to this exact commit and workflow.
+      id-token: write
+      attestations: write
+
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+      digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          # Provided automatically; no secret to manage.
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=long
+            type=ref,event=branch
+          labels: |
+            org.opencontainers.image.title=NavPort
+            org.opencontainers.image.description=Aviation weather intelligence and route risk briefing
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Azure Container Apps runs amd64; arm64 is here so the same image
+          # runs natively on an Apple Silicon Mac for local testing.
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Attest provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Scan for known vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          # Reported, not enforced: a base-image CVE with no available fix
+          # would otherwise block every deploy until upstream patches it.
+          exit-code: '0'
+
+  deploy:
+    name: Roll out to Azure
+    runs-on: ubuntu-latest
+    needs: publish
+    # Skipped entirely until the Azure secrets exist, so the workflow is
+    # useful for publishing the image on its own.
+    if: vars.AZURE_CONTAINERAPP_NAME != ''
+
+    permissions:
+      contents: read
+      id-token: write            # OIDC federated login — no stored password
+
+    environment:
+      name: production
+      url: ${{ steps.rollout.outputs.url }}
+
+    steps:
+      # OIDC rather than a long-lived service principal secret: GitHub proves
+      # its identity to Azure per run and gets a short-lived token, so there
+      # is no credential in the repository to leak or rotate.
+      #
+      # Set up: az ad app create, then federated credentials for this repo.
+      # Requires AZURE_CLIENT_ID, AZURE_TENANT_ID and AZURE_SUBSCRIPTION_ID.
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Update the container app
+        id: rollout
+        run: |
+          az config set extension.use_dynamic_install=yes_without_prompt
+
+          az containerapp update \
+            --name "${{ vars.AZURE_CONTAINERAPP_NAME }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}"
+
+          FQDN=$(az containerapp show \
+            --name "${{ vars.AZURE_CONTAINERAPP_NAME }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+
+          echo "url=https://$FQDN" >> "$GITHUB_OUTPUT"
+          echo "Deployed to https://$FQDN"
+
+      - name: Verify the deployment is healthy
+        # A rollout that reports success but serves 503 is still a failed
+        # deploy. Scale-to-zero means the first request pays a cold start, so
+        # this allows generous time before giving up.
+        run: |
+          URL="${{ steps.rollout.outputs.url }}/api/health"
+
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 30 "$URL" | grep -q '"status"'; then
+              echo "healthy"
+              curl -fsS "$URL"
+              exit 0
+            fi
+            echo "attempt $i not ready yet"
+            sleep 10
+          done
+
+          echo "::error::deployment did not become healthy"
+          exit 1

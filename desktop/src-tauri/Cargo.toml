@@ -1,0 +1,38 @@
+[package]
+name = "navport"
+version = "2.0.0"
+description = "Aviation weather intelligence and route risk briefing"
+authors = ["NavPort"]
+edition = "2021"
+
+# Tauri v2's mobile targets build the app as a library that the generated
+# Android and iOS projects link against, so the crate has to expose both a lib
+# and a bin. `staticlib` is for iOS, `cdylib` for Android, `rlib` for the
+# desktop binary below.
+[lib]
+name = "navport_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "navport"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[features]
+# Enabled by `tauri dev`; keeps the dev-only asset server out of release builds.
+custom-protocol = ["tauri/custom-protocol"]
+
+# Optimise the release binary for size. A Tauri app is mostly the OS webview,
+# so the Rust side has little reason to be large — this typically takes the
+# desktop binary from several megabytes to well under one.
+[profile.release]
+opt-level = "s"     # optimise for size
+lto = true          # link-time optimisation across crates
+codegen-units = 1   # slower build, better optimisation
+panic = "abort"     # no unwinding tables
+strip = true        # drop debug symbols

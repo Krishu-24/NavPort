@@ -7,7 +7,12 @@ plain-English briefing with an automated risk assessment.
 
 ## How to Run
 
-### One-click
+There are two ways. **Python** is for developing on your laptop.
+**Docker** is the shape that gets hosted on Azure — same image, same port,
+same memory cap. The assignment path is Docker, then
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+### Local development (Python)
 
 | Platform | Double-click |
 |---|---|
@@ -20,43 +25,53 @@ Either one will:
 2. Create a virtual environment in `.venv/` — skipped if one already exists.
 3. Install dependencies from `requirements.txt` — skipped if they're already
    up to date.
-4. Start the server and print `http://localhost:5000`.
+4. Start the Flask dev server on `http://localhost:5000` (debugger and LAN
+   bind are opted into explicitly; production defaults stay safe).
 
-Re-running is always safe, including after a fresh `git pull` — dependencies
-are only re-installed when `requirements.txt` has actually changed, and an
-existing virtual environment is never re-created.
+Re-running is always safe after a `git pull`. On macOS, if double-clicking
+opens a text editor, run `chmod +x run.command` once, or `./run.command`.
 
-> **macOS first run:** if double-clicking opens the file in a text editor
-> instead of running it, make it executable once with
-> `chmod +x run.command`. From a terminal you can also just run
-> `./run.command`.
-
-### Manual setup (Windows / macOS / Linux)
+Manual equivalent:
 
 ```bash
 python -m venv .venv
-```
-
-```bash
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
-```
-
-```bash
+# Windows: .venv\Scripts\activate
+# macOS / Linux: source .venv/bin/activate
 pip install -r requirements.txt
 python run.py
 ```
 
-Then open **http://localhost:5000**.
+### What you deploy (Docker)
+
+This is the production image Azure will run. Install
+[Docker Desktop](https://www.docker.com/products/docker-desktop/), then from
+this folder:
+
+```bash
+docker compose up --build
+```
+
+Open **http://localhost:8000** and **http://localhost:8000/api/health**.
+`"status":"ok"` means gunicorn started and the airport database loaded.
+
+Compose uses 0.5 CPU / 1 GB — the same size as a free Azure Container Apps
+replica — so an out-of-memory problem shows up here. Full hosting steps
+(registry, Container Apps, free-tier limits) are in
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+Do **not** use Azure App Service F1: it cannot run this custom image. Do
+**not** use Azure Container Registry: it is not free. Store the image on
+GitHub Container Registry (`ghcr.io`).
 
 ## Documentation Hub
 
 | Doc | What's in it |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Request flow, module map, diagrams, why the backend is split the way it is |
-| This README | Setup, features, API endpoints, project layout |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Start here for hosting.** Docker locally, why Container Apps, ghcr.io, Azure create commands, free-tier math |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Request flow, module map, why the backend is split the way it is |
+| [docs/SECURITY.md](docs/SECURITY.md) | Issues found while hardening, what fixed them, known limitations |
+| [desktop/README.md](desktop/README.md) | Optional: Tauri installers that call the Azure URL. Not required for deployment |
+| This README | Local run, features, API, layout |
 
 ## What You Get
 
@@ -101,25 +116,53 @@ NavPort/
 ├── run.command                # macOS / Linux one-click launcher
 ├── run.py                     # Entry point (python run.py)
 ├── requirements.txt
+├── pyproject.toml             # Ruff config
+├── Dockerfile                 # What Azure runs: two-stage, non-root, gunicorn
+├── docker-compose.yml         # Same image locally, 0.5 CPU / 1 GB like Azure
+├── gunicorn.conf.py           # Production WSGI (used inside the container)
+├── .env.example               # Names of the env vars compose/Azure set
 ├── WHATS-NEW.md               # What changed from the previous version
 ├── backend/
-│   ├── __init__.py            # Flask app factory
-│   ├── config.py              # Constants & lookup tables
+│   ├── __init__.py            # Flask app factory, /api/health
+│   ├── config.py              # Settings, production-safe defaults
+│   ├── security.py            # Headers, rate limiting, gzip, error handling
+│   ├── validation.py          # Input validation — bad input is 4xx, not 500
+│   ├── cache.py               # TTL cache for upstream weather calls
 │   ├── telemetry.py           # Live console device/traffic reporting
 │   ├── models/pirep.py        # PIREP dataclass + raw-text parsing
-│   ├── services/              # flight_rules · pirep · nlp · weather
+│   ├── services/              # flight_rules · pirep · nlp · weather · airports
 │   └── routes/                # /api/* Flask blueprints
 ├── frontend/
 │   ├── index.html
-│   ├── css/                   # tokens · layout · components · dashboard · print
+│   ├── manifest.webmanifest   # PWA install metadata
+│   ├── sw.js                  # Service worker — shell cached, weather never
+│   ├── offline.html           # Shown when there is no connection
+│   ├── css/                   # tokens · layout · components · dashboard · platform · print
 │   ├── js/
 │   │   ├── main.js            # ES module entry point
-│   │   ├── core/              # api · state · dom · format
-│   │   ├── ui/                # shell · theme · recent · toast
+│   │   ├── config.js          # Resolves the API base URL for packaged apps
+│   │   ├── native.js          # Native-shell detection, runs before first paint
+│   │   ├── core/              # api · state · dom · format · idents
+│   │   ├── ui/                # shell · theme · recent · toast · offline
 │   │   └── views/             # overview · risk · ribbon · map · charts · notams · timeline · alternates · pireps
-│   └── assets/icon.png
+│   ├── vendor/                # Leaflet, Chart.js, IBM Plex — served from our own origin
+│   └── assets/                # icon.png + generated icon set
+├── desktop/                   # Optional Tauri shells — not the Azure deploy
+├── scripts/
+│   ├── vendor_assets.py       # Fetch + hash-verify frontend/vendor/
+│   ├── ui_matrix.py           # Render at 7 form factors, audit the layout
+│   ├── build_icons.py         # Generate every icon size from icon.png
+│   ├── build_airport_db.py    # Rebuild the bundled airport database
+│   └── check_tauri_config.py  # Validate tauri.conf.json against the v2 schema
+├── tests/
+│   ├── smoke_test.py          # End-to-end against a running server
+│   └── test_risk.py           # Risk scoring logic
+├── .github/workflows/         # ci · deploy (ghcr + optional Azure) · apps
 └── docs/
-    └── ARCHITECTURE.md
+    ├── ARCHITECTURE.md
+    ├── DEPLOYMENT.md
+    ├── SECURITY.md
+    └── screenshots/           # Output of scripts/ui_matrix.py
 ```
 
 ## API Endpoints
@@ -127,6 +170,7 @@ NavPort/
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/` | Serves the dashboard |
+| `GET` | `/api/health` | Liveness: `"status":"ok"` if the airport DB loaded. Docker and Azure probe this |
 | `POST` | `/api/enhanced-flight-plan` | Full route analysis: weather timeline, NOTAMs, risk assessment, briefing |
 | `POST` | `/api/process-natural-language` | Extracts departure/destination/waypoints/speed from free text |
 | `GET` | `/api/pirep-reports/<station_id>` | PIREPs near a station (`?distance=`, `?age=`, `?raw=true\|false`) |
@@ -141,8 +185,11 @@ dependency, no extra packages beyond `requirements.txt`).
 
 **Frontend:** Native ES modules — no bundler, no build step, no framework
 runtime. Chart.js for the wind/visibility plots, Leaflet for the route map,
-IBM Plex Sans + IBM Plex Mono via Google Fonts. Light and dark themes driven
-entirely by CSS custom properties.
+IBM Plex Sans + IBM Plex Mono for type. All three are committed under
+`frontend/vendor/` and served from the app's own origin rather than a CDN, so
+a bad minute at jsdelivr cannot leave the page with no map, and the packaged
+apps open without a network. Light and dark themes driven entirely by CSS
+custom properties.
 
 **Data:** [Aviation Weather Center](https://aviationweather.gov) public API for
 weather; [OurAirports](https://ourairports.com/data/) (public domain) for the
@@ -165,13 +212,69 @@ bundled worldwide airport database.
 
 ## Configuration
 
-Environment variables (all optional, read in `backend/config.py`):
+Environment variables, all optional and read in `backend/config.py`. Every
+default is the safe one: with nothing set, the app runs as though it were in
+production, so forgetting a variable can never be what exposes the debugger.
+`run.bat` and `run.command` are the only things that opt into development
+mode, and they do it explicitly.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `NAVPORT_HOST` | `0.0.0.0` | Bind address |
-| `NAVPORT_PORT` | `5000` | Port |
-| `NAVPORT_DEBUG` | `true` | Flask debug/reload mode |
+| `NAVPORT_ENV` | `production` | `development` relaxes the defaults below |
+| `NAVPORT_HOST` | `0.0.0.0` in production, `127.0.0.1` otherwise | Bind address |
+| `PORT` / `NAVPORT_PORT` | `5000` | Port. `PORT` wins — it is what Azure and most hosts set |
+| `NAVPORT_DEBUG` | `false` | Flask debug/reload. Ignored unless `NAVPORT_ENV` is development, because the debugger is remote code execution |
+| `NAVPORT_CORS_ORIGINS` | native-shell origins | Comma-separated allowlist, or `*` in development |
+| `NAVPORT_RATE_LIMIT` | `60` | Requests per window, per IP |
+| `NAVPORT_BRIEFING_RATE_LIMIT` | `10` | Briefings per window, per IP — this is the endpoint that fans out to the upstream API |
+| `NAVPORT_RATE_WINDOW` | `60` | Window length in seconds |
+| `NAVPORT_TRUST_PROXY` | on in production | Read the client IP from `X-Forwarded-For`. Only correct behind a proxy that overwrites that header — otherwise anyone can spoof their way around the rate limit. Set it to `false` when running the container with no proxy in front |
+| `NAVPORT_TELEMETRY` | on in development | Live console device/traffic reporting |
+| `NAVPORT_CACHE_WEATHER_TTL` | `300` | Seconds to cache an upstream weather response |
+| `NAVPORT_CACHE_STATION_TTL` | `86400` | Seconds to cache station coordinates |
+| `NAVPORT_MAX_BODY_BYTES` | `65536` | Request body limit |
+
+Gunicorn has its own knobs (`WEB_CONCURRENCY`, `NAVPORT_THREADS`,
+`NAVPORT_TIMEOUT`) documented in `gunicorn.conf.py`.
+
+## After it is on Azure
+
+The container **is** the website. Opening the Container Apps HTTPS URL is
+enough for a deployment demo.
+
+Optional, not part of hosting:
+
+| Extra | How |
+|---|---|
+| **Home-screen icon** | On the phone, open the Azure URL → Add to Home Screen / Install. That is a PWA; weather still comes from Azure |
+| **Windows / Mac / Android installers** | [desktop/README.md](desktop/README.md). Thin Tauri windows that call the same API. Bake `NAVPORT_API_BASE` to the Azure hostname. Skip App Store / Play |
+
+## Checking It Still Works
+
+```bash
+python tests/test_risk.py                  # risk scoring, no server needed
+python tests/smoke_test.py                 # every endpoint, against a running server
+python scripts/ui_matrix.py                # render at 7 form factors and audit the layout
+python scripts/vendor_assets.py --check    # confirm frontend/vendor/ matches upstream
+ruff check backend/ scripts/ tests/ run.py
+```
+
+`ui_matrix.py` drives a headless Chrome or Edge, runs a real briefing at each
+size, writes a screenshot to `docs/screenshots/`, and fails on horizontal
+overflow, tap targets whose reachable area is under 44px, or form fields small
+enough to make iOS Safari zoom on focus. `.github/workflows/ci.yml` runs the
+rest on every push, plus a Docker build that starts the image and asserts it is
+healthy and not running as root.
+
+The tap-target check hit-tests with `elementFromPoint` rather than measuring
+bounding boxes, because several controls are deliberately small on screen and
+grown with a transparent `::after` — a box measurement reports those as
+failures when they are fine, and reports a control covered by something
+stacked on top of it as fine when it is not.
+
+| Desktop, 1280px | Phone, 393px |
+|---|---|
+| ![NavPort on a 1280px desktop](docs/screenshots/desktop-1280.png) | ![NavPort on a 393px phone](docs/screenshots/iphone-15.png) |
 
 ## Disclaimer
 

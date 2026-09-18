@@ -2,23 +2,58 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- viewport-fit=cover lets the layout reach under a notch and the home
+         indicator; the safe-area insets in layout.css then pad the content
+         back out of them. Without it, iOS letterboxes the whole page. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="NavPort — aviation weather intelligence and route risk briefing.">
     <title>NavPort · Flight Weather Intelligence</title>
 
-    <link rel="icon" type="image/png" href="assets/icon.png">
+    <!-- ══ Installable app ══════════════════════════════════════════ -->
+    <link rel="manifest" href="/manifest.webmanifest">
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap" rel="stylesheet">
+    <!-- Tints the Android address bar and the desktop title bar. Two values so
+         the chrome follows the theme instead of fighting it. -->
+    <meta name="theme-color" content="#1B4A7C" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#12120F" media="(prefers-color-scheme: dark)">
 
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <!-- iOS ignores the manifest for home-screen launches and reads these. -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="NavPort">
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+
+    <link rel="icon" href="assets/icons/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
+
+    <!-- ══ Third-party, served from our own origin ══════════════════ -->
+    <!-- Leaflet, Chart.js and IBM Plex live in frontend/vendor/, fetched and
+         hash-verified by scripts/vendor_assets.py. They used to come from
+         unpkg, jsdelivr and Google Fonts; a CDN having a bad minute meant the
+         map and the charts silently did not appear, and the packaged desktop
+         and mobile builds could not open without a network. -->
+    <link rel="preload" href="vendor/fonts/ibm-plex-sans-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="vendor/fonts/ibm-plex-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="vendor/fonts/fonts.css">
+    <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 
     <link rel="stylesheet" href="css/tokens.css">
     <link rel="stylesheet" href="css/layout.css">
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/dashboard.css">
+    <!-- Loaded after the base styles so it can correct them for touch,
+         notched screens and the native shells. -->
+    <link rel="stylesheet" href="css/platform.css">
     <link rel="stylesheet" href="css/print.css">
+
+    <!-- Blocking and in <head> on purpose: it must run before first paint so
+         the native shell's title-bar styling doesn't arrive as a visible
+         reflow. An external file rather than an inline script so the CSP can
+         keep refusing inline JavaScript, which is the rule that actually
+         stops injected script from executing. -->
+    <script src="js/native.js"></script>
 </head>
 <body>
 
@@ -60,7 +95,7 @@
             <div class="field">
                 <label for="waypoints">Waypoints <span class="label__aside">ICAO</span></label>
                 <input id="waypoints" class="input" type="text" placeholder="KORD, KDEN"
-                       value="KORD, KDEN" autocomplete="off" spellcheck="false"
+                       autocomplete="off" spellcheck="false"
                        title="Optional ICAO codes, comma separated">
             </div>
 
@@ -96,7 +131,7 @@
     <!-- ══ Main ═════════════════════════════════════════════════════ -->
     <div class="main">
         <header class="topbar">
-            <button class="icon-btn topbar__menu" id="menu-btn" aria-label="Open flight plan">
+            <button class="icon-btn topbar__menu" id="menu-btn" aria-label="Open flight plan" aria-controls="sidebar" aria-expanded="false">
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
             </button>
 
@@ -310,8 +345,15 @@
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!--
+  Both libraries are served from our own origin, so there is no SRI attribute
+  to keep in sync: the bytes were hash-checked when scripts/vendor_assets.py
+  fetched them, and they are in the repository. `defer` keeps them off the
+  critical path while preserving execution order — main.js is a module and so
+  is deferred implicitly, which puts it after these two either way.
+-->
+<script src="vendor/chartjs/chart.umd.min.js" defer></script>
+<script src="vendor/leaflet/leaflet.js" defer></script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

@@ -2,7 +2,8 @@
 
 This document describes how NavPort is put together: the request flow, the
 module map, and why the backend is split the way it is. For install/run
-instructions see the [README](../README.md).
+instructions see the [README](../README.md). For Docker and Azure (the
+deployment) see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## 1. High-level flow
 
@@ -49,7 +50,13 @@ instructions see the [README](../README.md).
    METAR/TAF/PIREP snippets, and categorizes severity (Clear / Significant /
    Severe).
 6. `SimpleNLPProcessor` turns the raw timeline into a plain-English briefing
-   and a risk score/recommendation.
+   and a risk score/recommendation. The score is an *exposure* figure — how
+   much of the route is affected, weighted by how badly — but the LOW /
+   MODERATE / HIGH verdict is set by the worst conditions on the route, not by
+   the average of it. Averaging alone let nine clear intervals either side of
+   one severe one report "LOW RISK — conditions acceptable for flight
+   operations" directly beneath a "Severe" outlook. `tests/test_risk.py`
+   pins the cases.
 7. The JSON response drives every dashboard card; PIREPs for a specific
    station are fetched on demand when a user opens the "Pilot Reports" modal.
 
@@ -134,9 +141,17 @@ run the app while still giving real module boundaries:
   a section never re-binds or leaks handlers.
 - **Untrusted text is escaped** (`esc()`) before it reaches any `innerHTML`;
   most rendering uses `el()`, which sets text nodes and cannot inject markup.
-- Third-party runtime deps are loaded from CDN (`Chart.js`, `Leaflet`). If
-  Leaflet or its tiles are unreachable, the map degrades to a labelled
-  placeholder and the rest of the dashboard is unaffected.
+- **Third-party runtime deps are vendored**, not loaded from a CDN. `Chart.js`,
+  `Leaflet` and the IBM Plex fonts live in `frontend/vendor/` and are served
+  from the app's own origin, fetched and hash-verified by
+  `scripts/vendor_assets.py`. They used to come from jsdelivr, unpkg and
+  Google Fonts; the failure mode was bad, because Leaflet not loading leaves a
+  blank grey panel where the map should be with nothing in the UI to say so.
+  It also means `script-src` and `font-src` are plain `'self'`, and the
+  packaged desktop and mobile apps open without a network.
+- Basemap tiles are still a live request to Esri. If the tiles are
+  unreachable the map degrades to a labelled placeholder and the rest of the
+  dashboard is unaffected.
 
 ## 3. Why it's split this way
 
@@ -185,3 +200,23 @@ timeline can still be rendered and risk-scored.
 - Every external API call has a timeout (10–15s) and is wrapped so a single
   failing product (e.g. G-AIRMET down) degrades to an empty list instead of
   failing the whole request.
+
+## 7. How it runs in production
+
+Local `python run.py` is development. The hosted process is **gunicorn
+inside a Docker image**, defined by [Dockerfile](../Dockerfile) and
+[gunicorn.conf.py](../gunicorn.conf.py).
+
+- Azure Container Apps (Consumption) pulls that image from `ghcr.io`,
+  terminates TLS, and forwards to port **8000**.
+- `NAVPORT_ENV=production` and `NAVPORT_TRUST_PROXY=true` are set on Azure.
+  Compose sets trust-proxy **false** because nothing sits in front locally.
+- `/api/health` is the liveness probe. It only checks that Flask started and
+  `airports.json.gz` loaded — not that aviationweather.gov is reachable —
+  so an upstream outage cannot make the orchestrator reboot the container
+  in a loop.
+- Scale-to-zero (`minReplicas: 0`) is the free-tier setting. The first
+  request after idle pays a cold start; that is expected.
+
+Details, commands, and what not to use (App Service F1, ACR) are in
+[DEPLOYMENT.md](DEPLOYMENT.md).

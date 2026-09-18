@@ -13,14 +13,39 @@ from typing import Dict, List, Optional
 
 import requests
 
+from backend.cache import TTLCache
 from backend.config import (
     AVIATIONWEATHER_BASE_URL,
+    CACHE_TTL_STATION_SECONDS,
+    CACHE_TTL_WEATHER_SECONDS,
     MAX_FUTURE_DEPARTURE_HOURS,
     MAX_PAST_DEPARTURE_DAYS,
 )
 from backend.services import airports, flight_rules
 from backend.services.nlp_processor import SimpleNLPProcessor
 from backend.services.pirep_service import PIREPService
+
+# Station coordinates and weather have completely different shelf lives, so
+# they get separate caches rather than one compromise TTL.
+STATION_CACHE = TTLCache(CACHE_TTL_STATION_SECONDS, name='stations')
+WEATHER_CACHE = TTLCache(CACHE_TTL_WEATHER_SECONDS, name='weather')
+
+
+def _stable_hash(text: str) -> str:
+    """A deterministic hex digest, used only for seeding.
+
+    The requirement is that the same inputs always produce the same simulated
+    weather, so that re-running a briefing doesn't silently change it. That
+    needs a hash that is stable across processes — `hash()` is not, since
+    Python randomises string hashing per interpreter — but it does not need a
+    cryptographic one. `usedforsecurity=False` records that, and keeps this
+    working on FIPS-mode systems where md5 is otherwise refused.
+    """
+    try:
+        return hashlib.md5(text.encode(), usedforsecurity=False).hexdigest()
+    except TypeError:
+        # usedforsecurity= was added in 3.9; fall back on older builds.
+        return hashlib.md5(text.encode()).hexdigest()  # noqa: S324
 
 
 class WeatherProcessor:
@@ -32,6 +57,12 @@ class WeatherProcessor:
         self.session.headers.update({
             'User-Agent': 'NavPort-WeatherService/1.0'
         })
+
+        # Without an explicit pool the default of 10 connections is shared by
+        # the 7-way concurrent fan-out plus every per-airport station lookup,
+        # so calls queue behind each other instead of overlapping.
+        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20)
+        self.session.mount('https://', adapter)
 
         self.nlp_processor = SimpleNLPProcessor()
         self.pirep_service = PIREPService(verbose=False)
@@ -106,9 +137,20 @@ class WeatherProcessor:
     def simulate_historical_weather(self, lat: float, lon: float, target_time: datetime, current_weather: Dict = None) -> Dict:
         """Simulate realistic weather conditions for a historical time based on current conditions."""
 
+        # md5 as a cheap deterministic hash, not as a security primitive: it
+        # only has to turn a coordinate and an hour into a stable seed, so
+        # collision resistance is irrelevant. `usedforsecurity=False` says so
+        # to the interpreter too, which matters on FIPS-enabled systems where
+        # md5 is otherwise unavailable.
         seed_str = f"{lat:.2f}_{lon:.2f}_{target_time.strftime('%Y%m%d%H')}"
-        seed = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-        random.seed(seed)
+        seed = int(_stable_hash(seed_str)[:8], 16)
+
+        # A private generator, not `random.seed()`. Seeding the module-level
+        # generator mutates process-wide state: under a threaded server two
+        # briefings running at once re-seed each other mid-draw, so the same
+        # coordinates and time stop producing the same weather. Determinism is
+        # the whole point of seeding here, and this is what preserves it.
+        rng = random.Random(seed)
 
         now = datetime.now(timezone.utc)
         hours_diff = (target_time - now).total_seconds() / 3600
@@ -116,29 +158,29 @@ class WeatherProcessor:
         if current_weather and current_weather.get('wspd') is not None:
             base_wind = current_weather.get('wspd', 10)
         else:
-            base_wind = random.uniform(5, 20)
+            base_wind = rng.uniform(5, 20)
 
-        weather_cycle = math.sin(hours_diff / 6 * math.pi) * 0.5 + random.uniform(-0.3, 0.3)
+        weather_cycle = math.sin(hours_diff / 6 * math.pi) * 0.5 + rng.uniform(-0.3, 0.3)
 
         month = target_time.month
         seasonal_factor = math.sin((month - 3) * math.pi / 6) * 0.3
 
         variation = weather_cycle + seasonal_factor
 
-        simulated_wind = max(0, base_wind + random.uniform(-5, 5))
+        simulated_wind = max(0, base_wind + rng.uniform(-5, 5))
 
         if variation > 0.4:
             weather_types = ['TSRA', 'SN', 'RA', 'FG']
-            weather_string = random.choice(weather_types)
-            visibility = random.uniform(0.5, 2)
-            ceiling = random.choice([200, 400, 800])
-            gusts = simulated_wind + random.uniform(10, 20)
+            weather_string = rng.choice(weather_types)
+            visibility = rng.uniform(0.5, 2)
+            ceiling = rng.choice([200, 400, 800])
+            gusts = simulated_wind + rng.uniform(10, 20)
         elif variation > 0.1:
             weather_types = ['', 'BKN', 'SCT', '-RA', 'HZ']
-            weather_string = random.choice(weather_types)
-            visibility = random.uniform(3, 6)
-            ceiling = random.choice([1000, 1500, 2000])
-            gusts = simulated_wind + random.uniform(5, 15) if random.random() > 0.7 else None
+            weather_string = rng.choice(weather_types)
+            visibility = rng.uniform(3, 6)
+            ceiling = rng.choice([1000, 1500, 2000])
+            gusts = simulated_wind + rng.uniform(5, 15) if rng.random() > 0.7 else None
         else:
             weather_string = ''
             visibility = 10
@@ -148,7 +190,7 @@ class WeatherProcessor:
         return {
             'wspd': int(simulated_wind),
             'wgst': int(gusts) if gusts else None,
-            'wdir': random.randint(180, 360),
+            'wdir': rng.randint(180, 360),
             'visib': visibility,
             'wxString': weather_string,
             'clouds': [{'cover': 'BKN', 'base': ceiling}] if ceiling else [],
@@ -202,8 +244,14 @@ class WeatherProcessor:
             except ValueError:
                 raise
             except Exception as e:
-                logging.error(f"Error parsing departure_time: {e}")
-                raise ValueError(f'Invalid departure_time format: {departure_time}. Please use the date/time picker.')
+                logging.error(f"Error parsing departure_time {departure_time!r}: {e}")
+                # The offending value is logged but not returned. It came from
+                # the caller, and reflecting untrusted input back into a
+                # response is a habit worth not having even where, as here,
+                # the client renders it safely.
+                raise ValueError(
+                    'Departure time is not a valid timestamp. Please use the date/time picker.'
+                ) from e
         else:
             current_time = datetime.now(timezone.utc)
 
@@ -243,22 +291,44 @@ class WeatherProcessor:
         return flight_segments
 
     def get_airport_coordinates(self, icao: str) -> Optional[Dict]:
-        """Get airport coordinates from station info."""
+        """Get airport coordinates, from the bundled database or station info.
+
+        The bundled OurAirports database already knows where 34,000 airports
+        are, so the common case needs no network call at all — this used to
+        cost one HTTP round trip per airport on every single briefing. The
+        upstream lookup stays as the fallback for stations that report weather
+        under an identifier the database doesn't carry.
+        """
+        code = (icao or '').strip().upper()
+        if not code:
+            return None
+
+        cached = STATION_CACHE.get(code)
+        if cached is not None:
+            return cached
+
+        local = airports.coordinates(code)
+        if local:
+            STATION_CACHE.set(code, local)
+            return local
+
         try:
             url = f"{self.base_url}/stationinfo"
-            params = {'ids': icao, 'format': 'json'}
+            params = {'ids': code, 'format': 'json'}
 
             response = self.session.get(url, params=params, timeout=10)
             if response.status_code == 200:
                 data = response.json()
                 if data and len(data) > 0:
-                    return {
+                    found = {
                         'lat': data[0].get('lat', 0),
                         'lon': data[0].get('lon', 0),
-                        'name': data[0].get('site', icao),
+                        'name': data[0].get('site', code),
                     }
+                    STATION_CACHE.set(code, found)
+                    return found
         except Exception as e:
-            logging.error(f"Error getting coordinates for {icao}: {e}")
+            logging.error(f"Error getting coordinates for {code}: {e}")
 
         return None
 
@@ -326,133 +396,102 @@ class WeatherProcessor:
 
         return weather_data
 
+    def _cache_key(self, product: str, params: Dict) -> str:
+        """Stable key for a cached upstream call."""
+        return product + '?' + '&'.join(f'{k}={params[k]}' for k in sorted(params))
+
     def get_historical_metars_by_bbox(self, bbox: str, departure_time: datetime = None) -> List[Dict]:
         """Fetch METAR data by bounding box with historical support."""
-        try:
-            url = f"{self.base_url}/metar"
-            params = {'bbox': bbox, 'format': 'json'}
+        url = f"{self.base_url}/metar"
+        params = {'bbox': bbox, 'format': 'json'}
 
-            if departure_time:
-                now_utc = datetime.now(timezone.utc)
+        if departure_time:
+            now_utc = datetime.now(timezone.utc)
 
-                if departure_time < now_utc - timedelta(hours=3):
-                    start_time = departure_time - timedelta(hours=1)
-                    end_time = departure_time + timedelta(hours=1)
-                    params['startTime'] = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
-                    params['endTime'] = end_time.strftime('%Y-%m-%dT%H:%M:%SZ')
-                else:
-                    params['hours'] = 3
+            if departure_time < now_utc - timedelta(hours=3):
+                start_time = departure_time - timedelta(hours=1)
+                end_time = departure_time + timedelta(hours=1)
+                params['startTime'] = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+                params['endTime'] = end_time.strftime('%Y-%m-%dT%H:%M:%SZ')
             else:
                 params['hours'] = 3
+        else:
+            params['hours'] = 3
 
-            response = self.session.get(url, params=params, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                enhanced_data = []
-                for metar in data:
-                    enhanced_metar = self.enhance_metar(metar)
-                    if metar.get('rawOb'):
-                        enhanced_metar['natural_language'] = self.nlp_processor.decode_metar_to_natural_language(metar['rawOb'])
-                    enhanced_data.append(enhanced_metar)
-                return enhanced_data
-            elif response.status_code == 204:
-                return []
-        except Exception as e:
-            logging.error(f"Error fetching METARs: {e}")
+        def fetch():
+            try:
+                response = self.session.get(url, params=params, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    enhanced_data = []
+                    for metar in data:
+                        enhanced_metar = self.enhance_metar(metar)
+                        if metar.get('rawOb'):
+                            enhanced_metar['natural_language'] = self.nlp_processor.decode_metar_to_natural_language(metar['rawOb'])
+                        enhanced_data.append(enhanced_metar)
+                    return enhanced_data
+                elif response.status_code == 204:
+                    return []
+            except Exception as e:
+                logging.error(f"Error fetching METARs: {e}")
 
-        return []
+            return []
+
+        # `cache_empty=False`: an empty result here usually means upstream
+        # throttled or timed out us, and caching that would keep the map and
+        # diversion panel blank for the rest of the TTL.
+        return WEATHER_CACHE.get_or_call(
+            self._cache_key('metar', params), fetch, cache_empty=False)
+
+    def _fetch_product(self, product: str, params: Dict, label: str) -> List[Dict]:
+        """One cached GET against an Aviation Weather Center product endpoint."""
+
+        def fetch():
+            try:
+                response = self.session.get(
+                    f"{self.base_url}/{product}", params=params, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    return data if isinstance(data, list) else []
+                elif response.status_code == 204:
+                    return []
+            except Exception as e:
+                logging.error(f"Error fetching {label}: {e}")
+
+            return []
+
+        return WEATHER_CACHE.get_or_call(
+            self._cache_key(product, params), fetch, cache_empty=False)
 
     def get_historical_pireps_by_bbox(self, bbox: str, departure_time: datetime = None) -> List[Dict]:
         """Fetch PIREP data by bounding box with historical support."""
-        try:
-            url = f"{self.base_url}/pirep"
-            params = {'bbox': bbox, 'format': 'json'}
+        params = {'bbox': bbox, 'format': 'json'}
 
-            if departure_time:
-                now_utc = datetime.now(timezone.utc)
-                if departure_time < now_utc - timedelta(hours=6):
-                    start_time = departure_time - timedelta(hours=3)
-                    end_time = departure_time + timedelta(hours=3)
-                    params['startTime'] = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
-                    params['endTime'] = end_time.strftime('%Y-%m-%dT%H:%M:%SZ')
-                else:
-                    params['age'] = 6
-            else:
-                params['age'] = 6
+        if departure_time and departure_time < datetime.now(timezone.utc) - timedelta(hours=6):
+            start_time = departure_time - timedelta(hours=3)
+            end_time = departure_time + timedelta(hours=3)
+            params['startTime'] = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+            params['endTime'] = end_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+        else:
+            params['age'] = 6
 
-            response = self.session.get(url, params=params, timeout=10)
-            if response.status_code == 200:
-                return response.json()
-            elif response.status_code == 204:
-                return []
-        except Exception as e:
-            logging.error(f"Error fetching PIREPs: {e}")
-
-        return []
+        return self._fetch_product('pirep', params, 'PIREPs')
 
     def get_tafs_by_bbox(self, bbox: str) -> List[Dict]:
         """Fetch TAF data by bounding box."""
-        try:
-            url = f"{self.base_url}/taf"
-            params = {'bbox': bbox, 'format': 'json'}
-
-            response = self.session.get(url, params=params, timeout=10)
-            if response.status_code == 200:
-                return response.json()
-            elif response.status_code == 204:
-                return []
-        except Exception as e:
-            logging.error(f"Error fetching TAFs: {e}")
-
-        return []
+        return self._fetch_product('taf', {'bbox': bbox, 'format': 'json'}, 'TAFs')
 
     def get_sigmets(self) -> List[Dict]:
         """Fetch SIGMET data."""
-        try:
-            url = f"{self.base_url}/airsigmet"
-            params = {'format': 'json'}
-
-            response = self.session.get(url, params=params, timeout=10)
-            if response.status_code == 200:
-                return response.json()
-            elif response.status_code == 204:
-                return []
-        except Exception as e:
-            logging.error(f"Error fetching SIGMETs: {e}")
-
-        return []
+        return self._fetch_product('airsigmet', {'format': 'json'}, 'SIGMETs')
 
     def get_gairmets(self) -> List[Dict]:
         """Fetch G-AIRMET data."""
-        try:
-            url = f"{self.base_url}/gairmet"
-            params = {'format': 'json'}
-
-            response = self.session.get(url, params=params, timeout=10)
-            if response.status_code == 200:
-                return response.json()
-            elif response.status_code == 204:
-                return []
-        except Exception as e:
-            logging.error(f"Error fetching G-AIRMETs: {e}")
-
-        return []
+        return self._fetch_product('gairmet', {'format': 'json'}, 'G-AIRMETs')
 
     def get_cwas(self) -> List[Dict]:
         """Fetch Center Weather Advisory data."""
-        try:
-            url = f"{self.base_url}/cwa"
-            params = {'format': 'json'}
-
-            response = self.session.get(url, params=params, timeout=10)
-            if response.status_code == 200:
-                return response.json()
-            elif response.status_code == 204:
-                return []
-        except Exception as e:
-            logging.error(f"Error fetching CWAs: {e}")
-
-        return []
+        return self._fetch_product('cwa', {'format': 'json'}, 'CWAs')
 
     def get_notams(self, airports: List[str], departure_time: datetime = None) -> List[Dict]:
         """Generate time-appropriate demo NOTAMs based on departure time.
@@ -478,15 +517,15 @@ class WeatherProcessor:
 
         for i, airport in enumerate(airports[:4]):
             seed_str = f"{airport}_{reference_time.strftime('%Y%m%d')}"
-            seed = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-            random.seed(seed)
+            seed = int(_stable_hash(seed_str)[:8], 16)
+            rng = random.Random(seed)  # noqa: S311 — simulation, not crypto
 
             template = notam_templates[i % len(notam_templates)]
             runway = runways[i % len(runways)]
             taxiway = taxiways[i % len(taxiways)]
 
-            start_offset_hours = random.randint(-48, -2)
-            duration_hours = random.randint(6, 72)
+            start_offset_hours = rng.randint(-48, -2)
+            duration_hours = rng.randint(6, 72)
 
             start_time = reference_time + timedelta(hours=start_offset_hours)
             end_time = start_time + timedelta(hours=duration_hours)
@@ -502,7 +541,7 @@ class WeatherProcessor:
                     'end_time': end_time.isoformat(),
                     'classification': template['classification'],
                     'severity': template['severity'],
-                    'created': (start_time - timedelta(hours=random.randint(1, 24))).isoformat(),
+                    'created': (start_time - timedelta(hours=rng.randint(1, 24))).isoformat(),
                     'source': 'Demo Data (Time-Based)',
                 })
 

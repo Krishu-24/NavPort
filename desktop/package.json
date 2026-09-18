@@ -1,0 +1,30 @@
+{
+  "name": "navport-shell",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Native app shells for NavPort — Windows, macOS, Linux, Android and iOS from one codebase",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+
+    "android:init": "tauri android init",
+    "android:dev": "tauri android dev",
+    "android:build": "tauri android build",
+    "android:apk": "tauri android build --apk",
+
+    "ios:init": "tauri ios init",
+    "ios:dev": "tauri ios dev",
+    "ios:build": "tauri ios build",
+
+    "icons": "tauri icon ../frontend/assets/icon.png",
+    "info": "tauri info",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.0"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.9.0"
+  }
+}

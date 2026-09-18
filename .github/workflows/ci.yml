@@ -1,0 +1,217 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel an in-progress run when the branch is pushed again — no point
+# finishing a build for a commit that has already been replaced.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ------------------------------------------------------------------------
+  # Static checks. Fast, no network, no services — these should fail first.
+  # ------------------------------------------------------------------------
+  lint:
+    name: Lint and static checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff
+          python -m pip install -r requirements.txt
+
+      - name: Ruff
+        run: ruff check backend/ scripts/ tests/ run.py
+
+      - name: Byte-compile everything
+        # Catches syntax errors in files no test happens to import.
+        run: python -m compileall -q backend/ scripts/ tests/ run.py
+
+      - name: Risk scoring
+        # Pure logic, no server and no network, so it runs with the linters.
+        run: python tests/test_risk.py
+
+      - name: Tauri config matches the v2 schema
+        run: python scripts/check_tauri_config.py
+
+      - name: Vendored libraries match upstream
+        # Leaflet, Chart.js and IBM Plex are committed under frontend/vendor/.
+        # This re-downloads the pinned versions and compares hashes, so a
+        # hand-edited or truncated copy in the tree is caught here.
+        run: python scripts/vendor_assets.py --check
+
+  # ------------------------------------------------------------------------
+  # End-to-end against a real server.
+  # ------------------------------------------------------------------------
+  test:
+    name: Smoke test
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Start the server
+        env:
+          NAVPORT_ENV: production
+          NAVPORT_TRUST_PROXY: 'false'
+          NAVPORT_HOST: 127.0.0.1
+          NAVPORT_PORT: '5000'
+        run: |
+          gunicorn --config gunicorn.conf.py run:app \
+            --bind 127.0.0.1:5000 --daemon \
+            --access-logfile server.log --error-logfile server.err
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5000/api/health > /dev/null; then
+              echo "up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+
+          echo "server did not become healthy"; cat server.err; exit 1
+
+      - name: Run the smoke test
+        # The happy-path checks call aviationweather.gov, a free public API
+        # that occasionally throttles. One retry keeps an upstream hiccup from
+        # failing an unrelated pull request.
+        run: python tests/smoke_test.py || python tests/smoke_test.py
+
+      - name: Server log on failure
+        if: failure()
+        run: cat server.log server.err || true
+
+  # ------------------------------------------------------------------------
+  # The image must actually build, and must actually run.
+  # ------------------------------------------------------------------------
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: navport:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run it and check health
+        # Building is not the same as working. This starts the image with the
+        # same limits as an Azure Container Apps replica, so an
+        # out-of-memory problem shows up here and not in production.
+        run: |
+          docker run -d --name navport-ci \
+            -p 8000:8000 \
+            -e NAVPORT_ENV=production \
+            -e NAVPORT_TRUST_PROXY=false \
+            --memory 1g --cpus 0.5 \
+            navport:ci
+
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:8000/api/health > /dev/null; then
+              echo "healthy after ${i}s"; break
+            fi
+            sleep 1
+          done
+
+          curl -fsS http://127.0.0.1:8000/api/health | tee health.json
+          grep -q '"status":"ok"' health.json || grep -q '"status": "ok"' health.json
+
+      - name: Confirm it is not running as root
+        # A container that quietly reverts to root defeats the point of the
+        # unprivileged user in the Dockerfile.
+        run: |
+          USER_ID=$(docker exec navport-ci id -u)
+          echo "container uid: $USER_ID"
+          test "$USER_ID" != "0"
+
+      - name: Smoke test the container
+        run: python tests/smoke_test.py http://127.0.0.1:8000
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs navport-ci || true
+
+      - name: Clean up
+        if: always()
+        run: docker rm -f navport-ci || true
+
+  # ------------------------------------------------------------------------
+  # Render the dashboard at seven form factors and check the layout.
+  #
+  # Not run on pull requests. Every screen it checks needs a real briefing,
+  # which means seven calls out to aviationweather.gov, and gating an
+  # unrelated PR on a free public API having a good day is not a useful
+  # signal. Run it from the Actions tab after touching CSS or markup.
+  # ------------------------------------------------------------------------
+  ui:
+    name: UI across form factors
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Start the server
+        run: |
+          NAVPORT_ENV=production gunicorn --config gunicorn.conf.py run:app \
+            --bind 127.0.0.1:5000 --daemon --error-logfile server.err
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5000/api/health > /dev/null; then break; fi
+            sleep 1
+          done
+
+      - name: Audit every form factor
+        # ubuntu-latest ships Chrome; the script finds it on PATH.
+        run: python scripts/ui_matrix.py
+
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: docs/screenshots/
+          if-no-files-found: warn

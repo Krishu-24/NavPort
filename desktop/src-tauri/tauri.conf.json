@@ -1,0 +1,80 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NavPort",
+  "version": "2.0.0",
+  "identifier": "com.navport.app",
+
+  "build": {
+    "devUrl": "http://localhost:5000",
+    "frontendDist": "../../frontend"
+  },
+
+  "app": {
+    "windows": [
+      {
+        "title": "NavPort",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 380,
+        "minHeight": 560,
+        "resizable": true,
+        "center": true,
+        "decorations": true,
+        "dragDropEnabled": false
+      }
+    ],
+
+    "security": {
+      "csp": {
+        "default-src": "'self' ipc: http://ipc.localhost",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self'",
+        "img-src": "'self' asset: http://asset.localhost data: blob: https://services.arcgisonline.com",
+        "connect-src": "'self' ipc: http://ipc.localhost http://localhost:5000 http://127.0.0.1:5000 https://*.azurecontainerapps.io https://*.azurewebsites.net",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "frame-ancestors": "'none'"
+      },
+      "capabilities": ["default"]
+    }
+  },
+
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "shortDescription": "Aviation weather and route risk briefing",
+    "longDescription": "NavPort pulls live METARs, TAFs, PIREPs, SIGMETs and G-AIRMETs along a flight path, builds a 15-minute interval timeline and produces a plain-English briefing with an automated risk assessment.",
+    "copyright": "NavPort",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "android": {
+      "minSdkVersion": 24
+    },
+    "iOS": {
+      "minimumSystemVersion": "14.0"
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+      }
+    }
+  },
+
+  "plugins": {}
+}

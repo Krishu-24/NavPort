@@ -13,12 +13,34 @@ export function startClock() {
 export function initRail() {
     const rail = $('#sidebar');
     const scrim = $('#scrim');
+    const menu = $('#menu-btn');
+    const closeBtn = $('#sidebar-close');
 
-    const open = () => { rail.classList.add('is-open'); show(scrim, true); };
-    const close = () => { rail.classList.remove('is-open'); show(scrim, false); };
+    // The rail is a permanent column on desktop and a drawer below 900px.
+    // Only the drawer has an open/closed state worth announcing or moving
+    // focus for — on desktop the panel is simply always there.
+    const isDrawer = () => window.matchMedia('(max-width: 900px)').matches;
 
-    $('#menu-btn').addEventListener('click', open);
-    $('#sidebar-close').addEventListener('click', close);
+    const open = () => {
+        rail.classList.add('is-open');
+        show(scrim, true);
+        menu.setAttribute('aria-expanded', 'true');
+        if (isDrawer()) closeBtn.focus();
+    };
+
+    const close = () => {
+        const wasOpen = rail.classList.contains('is-open');
+        rail.classList.remove('is-open');
+        show(scrim, false);
+        menu.setAttribute('aria-expanded', 'false');
+        // Hand focus back to the control that opened the drawer, but only if
+        // it is still inside the drawer we just closed — otherwise this would
+        // yank the caret off whatever the user has since moved to.
+        if (wasOpen && isDrawer() && rail.contains(document.activeElement)) menu.focus();
+    };
+
+    menu.addEventListener('click', open);
+    closeBtn.addEventListener('click', close);
     scrim.addEventListener('click', close);
     $('#empty-cta').addEventListener('click', () => {
         if (window.matchMedia('(max-width: 1024px)').matches) open();

@@ -1,0 +1,21 @@
+# Rust build output — hundreds of MB, fully reproducible
+src-tauri/target/
+
+# Generated native projects. `tauri android init` / `tauri ios init` recreate
+# these from tauri.conf.json, so they are build artefacts, not source.
+#
+# Note: once you start signing releases you will want to commit
+# gen/android/app/build.gradle.kts if you hand-edit it, and you must NEVER
+# commit the keystore or its password.
+src-tauri/gen/
+
+# Signing material. Committing any of this leaks the ability to publish
+# updates as you.
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+*.provisionprofile
+keystore.properties
+
+node_modules/

@@ -12,6 +12,7 @@ import { initRail, setBusy, setView, startClock } from './ui/shell.js';
 import { initTheme } from './ui/theme.js';
 import { initRecent, remember } from './ui/recent.js';
 import { toast } from './ui/toast.js';
+import { initConnection } from './ui/offline.js';
 
 import { renderOverview } from './views/overview.js';
 import { renderBriefing, renderRisk } from './views/risk.js';
@@ -73,6 +74,9 @@ function renderPrintHeader(data) {
     ].join('  ·  ');
 }
 
+/** Set by boot(); lets analyze() dismiss the off-canvas rail on phones. */
+let rail = null;
+
 async function analyze(event) {
     event?.preventDefault();
     if (getState().loading) return;
@@ -91,6 +95,11 @@ async function analyze(event) {
 
     setState({ loading: true });
     setBusy(true);
+    // On a phone the form covers the whole screen, so leaving it open hides
+    // the very result it just asked for. Closing here rather than on click
+    // means a rejected plan keeps the form up, with the offending field in
+    // view. On desktop the rail is not off-canvas and this is a no-op.
+    rail?.close();
     setView('loading');
     resetAlternates();
 
@@ -111,7 +120,14 @@ async function analyze(event) {
         console.error(err);
         setState({ loading: false });
         setView(getState().briefing ? 'results' : 'empty');
-        toast(err.message || 'Analysis failed.', 'err', 8000);
+
+        // Being throttled is recoverable and the server says when to retry, so
+        // that is more useful to show than the generic message.
+        const message = err.retryAfter
+            ? `Too many briefings — try again in ${err.retryAfter}s.`
+            : err.message || 'Analysis failed.';
+
+        toast(message, 'err', err.offline ? 10000 : 8000);
     } finally {
         setBusy(false);
     }
@@ -121,8 +137,9 @@ function boot() {
     $('#departure-time').value = defaultDeparture();
 
     initTheme();
+    initConnection();
     startClock();
-    initRail();
+    rail = initRail();
     initTimeline();
     initRibbonLink();
     initPirepModal();

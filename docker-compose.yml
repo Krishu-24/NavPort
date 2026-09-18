@@ -1,0 +1,54 @@
+# Local Docker run — the same image that gets deployed to Azure, so a problem
+# shows up here rather than in the cloud. This file is not used by Azure;
+# Azure pulls the image from ghcr.io and applies its own CPU/RAM/env.
+#
+#   docker compose up --build
+#   -> http://localhost:8000  and  /api/health
+#
+# The resource limits mirror an Azure Container Apps 0.5 vCPU / 1 GiB replica.
+# Testing under the same ceiling as production is the point: an image that
+# only works with unlimited memory locally will be OOM-killed up there.
+
+services:
+  navport:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: navport:local
+    container_name: navport
+    ports:
+      - "8000:8000"
+    environment:
+      NAVPORT_ENV: production
+      PORT: "8000"
+      # Azure's ingress sets X-Forwarded-For. Nothing does here, so leaving
+      # this on would let any client spoof its address past the rate limiter.
+      NAVPORT_TRUST_PROXY: "false"
+      WEB_CONCURRENCY: "2"
+      NAVPORT_THREADS: "8"
+    restart: unless-stopped
+
+    # Defence in depth: even after the container drops to an unprivileged
+    # user, these stop a compromised process from escalating.
+    read_only: true
+    tmpfs:
+      # gunicorn's worker heartbeat files, and anything Python writes to /tmp.
+      - /dev/shm:size=64m
+      - /tmp:size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 1G
+
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3

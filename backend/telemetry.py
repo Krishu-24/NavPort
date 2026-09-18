@@ -328,33 +328,48 @@ TELEMETRY = Telemetry()
 
 
 def print_banner(app_name: str, host: str, port: int, lan_ips=None) -> None:
-    width = min(shutil.get_terminal_size((96, 24)).columns - 2, 68)
-    started = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
-
-    rows = [
-        (f"{BOLD}{WHITE}{app_name}{RESET}{GREY}{SEP}flight weather intelligence{RESET}", ''),
-        ('', ''),
-        (f"{GREY}Local{RESET}", f"{CYAN}http://127.0.0.1:{port}{RESET}"),
-    ]
+    width = min(shutil.get_terminal_size((96, 24)).columns - 2, 72)
     if isinstance(lan_ips, str):
         lan_ips = [lan_ips]
     lan_ips = lan_ips or []
 
-    for i, ip in enumerate(lan_ips):
-        label = 'Network' if i == 0 else ''
-        rows.append((f"{GREY}{label}{RESET}", f"{CYAN}http://{ip}:{port}{RESET}"))
+    # One address per thing you might want to open, and never the same UI
+    # listed twice under two hosts. The old banner printed "New UI" once for
+    # 127.0.0.1 and again for the LAN address, which reads as two separate
+    # deployments rather than one server reachable by two names.
+    rows = [
+        (f"{BOLD}{WHITE}{app_name}{RESET}", ''),
+        ('', ''),
+    ]
 
-    rows.append((f"{GREY}Started{RESET}", f"{GREY}{started}{RESET}"))
+    if lan_ips:
+        ip = lan_ips[0]
+        rows += [
+            (f"{GREEN}New UI{RESET}",  f"{GREEN}http://{ip}:{port}/test-ui{RESET}"),
+            (f"{GREY}Old UI{RESET}",   f"{CYAN}http://{ip}:{port}/{RESET}"),
+            (f"{GREY}This PC{RESET}",  f"{CYAN}http://127.0.0.1:{port}/test-ui{RESET}"),
+            ('', ''),
+            (f"{FAINT}The first two open on this laptop and on any{RESET}", ''),
+            (f"{FAINT}phone on the same Wi-Fi - same server, same{RESET}", ''),
+            (f"{FAINT}files. 127.0.0.1 only ever means \"the machine{RESET}", ''),
+            (f"{FAINT}asking\", so a phone can never open it.{RESET}", ''),
+        ]
+    else:
+        rows += [
+            (f"{GREEN}New UI{RESET}", f"{GREEN}http://127.0.0.1:{port}/test-ui{RESET}"),
+            (f"{GREY}Old UI{RESET}",  f"{CYAN}http://127.0.0.1:{port}/{RESET}"),
+            ('', ''),
+            (f"{FAINT}Listening on this machine only, so there are{RESET}", ''),
+            (f"{FAINT}no phone links. For those, start it with:{RESET}", ''),
+            (f"{FAINT}  set NAVPORT_HOST=0.0.0.0 && run.bat{RESET}", ''),
+        ]
 
     print(f"\n{GREY}{G['tl']}{G['h'] * (width - 2)}{G['tr']}{RESET}")
     for left, right in rows:
-        text = left if not right else f"{left:<{9 + (len(left) - _visible_len(left))}}{right}"
+        text = left if not right else f"{left:<{10 + (len(left) - _visible_len(left))}}{right}"
         print(f"{GREY}{G['v']}{RESET} {text}{' ' * max(0, width - 4 - _visible_len(text))} {GREY}{G['v']}{RESET}")
     print(f"{GREY}{G['bl']}{G['h'] * (width - 2)}{G['br']}{RESET}")
-
-    if lan_ips:
-        print(f"{FAINT}  other devices: use a Network address, on the same network{RESET}")
-    print(f"{FAINT}  watching for connections - ctrl+c to stop{RESET}\n", flush=True)
+    print(f"{FAINT}  ctrl+c to stop{RESET}\n", flush=True)
 
 
 def lan_addresses() -> List[str]:

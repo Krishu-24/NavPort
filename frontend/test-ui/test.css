@@ -1,0 +1,559 @@
+/* New-UI overlay for /test-ui. The live dashboard styles are unchanged.
+   Dots live on `.main` only. The rail stays a flat surface. */
+
+.sandbox-rail {
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--ink-3);
+}
+
+.sandbox-tag {
+    flex: none;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+    text-decoration: none;
+    border: 1px solid var(--line);
+    border-radius: 99px;
+    padding: 3px 8px;
+}
+.sandbox-tag:hover { color: var(--ink); border-color: var(--ink-4); }
+
+/* ---- Dotted field on the main pane only -------------------------------- */
+
+.main {
+    background-color: var(--paper);
+    --dot: color-mix(in srgb, var(--ink) 5%, transparent);
+    background-image: radial-gradient(circle at center, var(--dot) 0.7px, transparent 0.9px);
+    background-size: 5px 5px;
+}
+
+:root[data-theme="dark"] .main {
+    --dot: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.rail { background: var(--surface); }
+
+/* The topbar veil should sit on the dotted field, not hide a different colour. */
+.topbar { background: var(--paper-veil); }
+
+/* ---- Radar: Dashlane sweep + NavPort mark ------------------------------ */
+
+.radar.scope {
+    --sweep: 0deg;
+    width: 240px;
+    height: 240px;
+    position: relative;
+    display: block;
+    isolation: isolate;
+    margin-bottom: var(--s5);
+}
+
+.scope__rings,
+.scope__cross,
+.scope__beam {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.scope__rings {
+    background:
+        radial-gradient(
+            circle at center,
+            color-mix(in srgb, var(--accent) 10%, transparent) 0 17%,
+            color-mix(in srgb, var(--accent) 3%, transparent) 17% 33%,
+            color-mix(in srgb, var(--accent) 7%, transparent) 33% 49%,
+            color-mix(in srgb, var(--accent) 2.5%, transparent) 49% 65%,
+            color-mix(in srgb, var(--accent) 6%, transparent) 65% 81%,
+            transparent 81%
+        );
+}
+
+.scope__rings::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background:
+        repeating-radial-gradient(
+            circle at center,
+            transparent 0,
+            transparent 38px,
+            color-mix(in srgb, var(--accent) 22%, transparent) 38px,
+            color-mix(in srgb, var(--accent) 22%, transparent) 39px
+        );
+    -webkit-mask: radial-gradient(circle, transparent 16%, #000 17%, #000 81%, transparent 82%);
+            mask: radial-gradient(circle, transparent 16%, #000 17%, #000 81%, transparent 82%);
+}
+
+.scope__rings::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    border: 1.5px dotted color-mix(in srgb, var(--accent) 42%, transparent);
+}
+
+.scope__cross {
+    background:
+        linear-gradient(color-mix(in srgb, var(--ink) 18%, transparent), color-mix(in srgb, var(--ink) 18%, transparent)) center / 1px 82% no-repeat,
+        linear-gradient(color-mix(in srgb, var(--ink) 18%, transparent), color-mix(in srgb, var(--ink) 18%, transparent)) center / 82% 1px no-repeat;
+    -webkit-mask: radial-gradient(circle, transparent 16%, #000 17%, #000 80%, transparent 81%);
+            mask: radial-gradient(circle, transparent 16%, #000 17%, #000 80%, transparent 81%);
+}
+
+.scope__beam {
+    background: conic-gradient(
+        from var(--sweep),
+        color-mix(in srgb, var(--accent) 48%, transparent) 0deg,
+        color-mix(in srgb, var(--accent) 16%, transparent) 32deg,
+        color-mix(in srgb, var(--accent) 4%, transparent) 54deg,
+        transparent 72deg
+    );
+    -webkit-mask: radial-gradient(circle, transparent 16%, #000 17%, #000 81%, transparent 82%);
+            mask: radial-gradient(circle, transparent 16%, #000 17%, #000 81%, transparent 82%);
+}
+
+.scope__beam::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(
+        from var(--sweep),
+        var(--accent) 0deg,
+        var(--accent) 1.6deg,
+        transparent 1.8deg
+    );
+    -webkit-mask: inherit;
+            mask: inherit;
+}
+
+.scope__blip {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 7px;
+    height: 7px;
+    margin: -3.5px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+    transform: rotate(var(--a)) translateY(calc(var(--r) * -110px));
+    opacity: .22;
+}
+
+.scope__hub {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 48px;
+    height: 48px;
+    margin: -24px 0 0 -24px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--accent) 12%, var(--paper));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+.scope__mark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 26px;
+    height: 26px;
+    margin: -13px 0 0 -13px;
+    color: var(--accent);
+    filter: drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 40%, transparent));
+    z-index: 1;
+}
+
+.empty h2 { margin-bottom: 12px; }
+
+/* ---- Split-flap / stencil board ---------------------------------------- */
+
+.board {
+    /* --- Seam geometry -------------------------------------------------
+       --split-rise: where the seam sits. A capital's optical centre is NOT
+       the box centre: measured in the bundled IBM Plex Mono, cap height is
+       0.70em and the baseline sits 0.875em below the top of a line-height:1
+       box, putting the cap's middle at 0.525em — 0.025em below centre. Held
+       in em so it stays correct at every size; a pixel nudge is only ever
+       right at one font size, which is exactly why the seam looked fine on
+       desktop and wrong on a phone.
+
+       --split: the gap itself, measured off the dope.security board in
+       ui_ideas/text_style: its seam runs ~0.093 of the cap height, and with a
+       0.70em cap that is 0.065em. It scales with the letter rather than
+       staying a fixed pixel gap — on a real board the seam reads as a
+       proportion of the flap, and a constant 1px vanished on the big hero.
+       The floor keeps it from dropping under a device pixel on small stamps,
+       where a sub-pixel seam turns into a grey smudge instead of a gap. */
+    --split: clamp(1px, 0.065em, 3.5px);
+    --split-rise: 0.025em;
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.08em;
+    align-items: stretch;
+    perspective: 520px;
+    font-family: var(--mono);
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    line-height: 1;
+    color: var(--ink);
+}
+
+/* A word is one unwrappable unit; the board breaks between words, never
+   inside one. `gap: inherit` keeps letter spacing identical to the board's. */
+.board__word {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: inherit;
+}
+
+.board__cell {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    min-width: 0.72em;
+    /* Symmetric, so the seam offset below is measured from a predictable
+       centre. Note 50% is the *box* centre, not the glyph's — see --split-rise. */
+    padding: 0.06em 0.02em;
+    font: inherit;
+    letter-spacing: 0;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    line-height: 1;
+    text-align: center;
+    transform-origin: 50% 50%;
+    transform-style: preserve-3d;
+}
+
+/* The seam is cut out of the glyph, not painted over it.
+   Painting a bar in --paper only works when the board sits on exactly that
+   colour; over the translucent topbar it showed as an opaque stripe against a
+   see-through backdrop, and it would smear over any card or wash behind it.
+   A mask removes the pixels instead, so whatever is really behind shows
+   through and the seam is correct on every surface. */
+.board__cell {
+    --seam-top: calc(50% + var(--split-rise) - var(--split) / 2);
+    --seam-bottom: calc(50% + var(--split-rise) + var(--split) / 2);
+    -webkit-mask-image: linear-gradient(to bottom,
+        #000 0, #000 var(--seam-top),
+        transparent var(--seam-top), transparent var(--seam-bottom),
+        #000 var(--seam-bottom), #000 100%);
+    mask-image: linear-gradient(to bottom,
+        #000 0, #000 var(--seam-top),
+        transparent var(--seam-top), transparent var(--seam-bottom),
+        #000 var(--seam-bottom), #000 100%);
+}
+
+.board__cell--gap {
+    min-width: 0.42em;
+    color: transparent;
+    -webkit-mask-image: none;
+    mask-image: none;
+}
+
+.board__cell.is-flip {
+    animation: flap .12s var(--ease);
+    color: color-mix(in srgb, currentColor 32%, transparent);
+    -webkit-text-stroke: 1px color-mix(in srgb, currentColor 88%, transparent);
+}
+
+.board__cell.is-set {
+    color: inherit;
+    -webkit-text-stroke: 0;
+}
+
+@keyframes flap {
+    0%   { transform: rotateX(0deg); }
+    48%  { transform: rotateX(-86deg); }
+    100% { transform: rotateX(0deg); }
+}
+
+/* --- Type scale -----------------------------------------------------------
+   The section stamps used to be the largest type in the results view, which
+   put the signposts above the thing they signpost: "ROUTE CONDITIONS" at 28px
+   shouted over the 2146nm it was introducing, and the route the whole page is
+   about tied with the clock at 13px. The stamps keep their size and everything
+   below them moves up, so the readings lead and the labels support.
+
+   Roughly x1.3 on the tiers that carry content, and only x1.15 on ambient
+   chrome like the clock — scaling everything by the same factor would have
+   preserved the inversion at a larger size instead of fixing it.
+
+   Sizes are fluid rather than stepped: a split-flap is unreadable when it gets
+   small — the seam eats a fixed share of a shrinking glyph and the flip turns
+   to mush — so the floors here sit above where the old phone overrides put
+   them. The old stepped font-size overrides further down were removed for the
+   same reason they were removed from the hero and stamps: a clamp already
+   covers every width, and the two only fought each other. */
+/* nowrap like the chip and clock beside it: these are single topbar labels,
+   and at 16px "ROUTE BRIEFING" was breaking over two lines in a 61px bar
+   while 350px of the bar sat empty. */
+.board--title { font-size: clamp(14px, 1.25vw, 16px); letter-spacing: .12em; flex-wrap: nowrap; }
+.board--hero { font-size: clamp(20px, 6vw, 42px); gap: 0.06em; letter-spacing: .12em; }
+.board--stamp { font-size: clamp(15px, 3.4vw, 28px); letter-spacing: .14em; }
+.board--eyebrow { font-size: clamp(12px, 1.1vw, 14px); letter-spacing: .14em; }
+.board--stat { font-size: 1em; letter-spacing: .08em; }
+.board--chip { font-size: clamp(14px, 1.35vw, 17px); letter-spacing: .08em; flex-wrap: nowrap; }
+.board--clock {
+    font-size: clamp(13px, 1.15vw, 15px);
+    letter-spacing: .06em;
+    flex-wrap: nowrap;
+    font-variant-numeric: tabular-nums;
+    gap: 0.05em;
+}
+.board__cell--colon { min-width: 0.32em; }
+
+.board--arrow { letter-spacing: 0; color: var(--ink-4); }
+.board--arrow .board__cell { min-width: 0.9em; }
+.board--arrow .board__cell.is-set { color: var(--ink-4); }
+
+.section__head {
+    align-items: center;
+    flex-wrap: wrap;
+}
+.section__head h2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s3);
+    flex: 1 1 100%;
+    min-width: 0;
+    font-size: inherit;
+    font-weight: 500;
+}
+.section__head .legend,
+.section__head .section__note {
+    margin-left: 0;
+}
+
+/* The readings are the deliverable and this row is the landing zone — the
+   first thing read and the reason the page exists — so it has to dominate the
+   28px section stamps outright rather than edge past them. At 30px against 28
+   the difference was arithmetic, not visible: the stamps still won on sheer
+   width and tracking. 38px settles it.
+
+   Scoped here rather than in dashboard.css so the original UI, which this
+   preview is meant to be compared against, keeps its own proportions.
+
+   The 3.6vw is not arbitrary: the stamps grow at 3.4vw and cap at 28px, so a
+   slower-growing stat crosses under them in the middle of the range — at
+   ~900px a 2.9vw stat was 26px against a stamp already pinned at its 28px
+   ceiling, putting the inversion right back. Growing faster than the stamps
+   and starting above where they land keeps the readings on top at every
+   width, not just the two I happened to look at. */
+.stat__value {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px;
+    font-size: clamp(26px, 3.6vw, 38px);
+}
+.stat__value .board { font-size: inherit; }
+/* The unit rides the number up, or "nm" starts to look detached from it. */
+.stat__unit { font-size: clamp(13px, 1.25vw, 16px); }
+
+/* Below ~342px the two-column grid leaves the right-hand column about 112px of
+   usable width, and the longest readings — "4H 46M", "SEVERE" — need ~123px at
+   26px, so the headline broke across two lines. It wraps at a word boundary
+   rather than overflowing, but a split headline is exactly the thing this row
+   is supposed to avoid, so the floor drops just for the 320px-class phones
+   that hit it. Everything from 360px up keeps the full 26px. */
+@media (max-width: 350px) {
+    .stat__value { font-size: 24px; }
+}
+
+/* Six readings in a five-column grid left "Outlook" stranded on a row of its
+   own with four empty columns beside it. Everything below 1080px already uses
+   three then two — both divisors of six — so only the widest case was wrong.
+   Three columns balance it 3 + 3 and, being ~350px wide, are what give the
+   numbers above room to be this size in the first place. Bounded below so the
+   narrower rules in dashboard.css, which load earlier, still win where they
+   apply. */
+@media (min-width: 1081px) {
+    .stats {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        row-gap: var(--s5);
+    }
+    .stat:nth-child(3n+1) { padding-left: 0; border-left: 0; }
+}
+
+/* Tone lives on the board so cells inherit it (inherit from .board, not the
+   grandparent). Without this, LIFR/IFR/SEVERE fall back to ink. */
+.stat__value--ok .board,
+.stat__value--ok .board__cell.is-set { color: var(--ok); }
+.stat__value--warn .board,
+.stat__value--warn .board__cell.is-set { color: var(--warn); }
+.stat__value--crit .board,
+.stat__value--crit .board__cell.is-set { color: var(--crit); }
+
+.board.cat--vfr,  .board.cat--vfr .board__cell.is-set  { color: var(--vfr); }
+.board.cat--mvfr, .board.cat--mvfr .board__cell.is-set { color: var(--mvfr); }
+.board.cat--ifr,  .board.cat--ifr .board__cell.is-set  { color: var(--ifr); }
+.board.cat--lifr, .board.cat--lifr .board__cell.is-set { color: var(--lifr); }
+
+.risk__level .board { font-size: clamp(19px, 1.8vw, 23px); letter-spacing: .1em; }
+.risk__level--ok .board,
+.risk__level--ok .board__cell.is-set { color: var(--ok); }
+.risk__level--warn .board,
+.risk__level--warn .board__cell.is-set { color: var(--warn); }
+.risk__level--crit .board,
+.risk__level--crit .board__cell.is-set { color: var(--crit); }
+
+.route-chip__dash {
+    width: auto;
+    height: auto;
+    background: none;
+    font-size: clamp(14px, 1.35vw, 17px);
+    color: var(--ink-4);
+}
+.clock { position: relative; }
+#utc-clock {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+.route-chip {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+.route-chip__code { display: inline-flex; }
+.route-chip__code .board,
+.route-chip__dash .board { flex-wrap: nowrap; }
+
+.topbar__right {
+    flex: none;
+}
+#print-btn {
+    flex: none;
+}
+
+.gauge__pct {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 1px;
+}
+.gauge__pct .board {
+    font-size: clamp(22px, 2.1vw, 27px);
+    letter-spacing: .06em;
+}
+.gauge__pct sup { font-size: clamp(12px, 1vw, 13px); }
+.gauge__pct:not(:has(.board)) {
+    opacity: 0;
+}
+.gauge__pct:has(.board) {
+    opacity: 1;
+}
+
+/* Don't play the original rise / number-count first — those were the old
+   entrance. Values stay invisible until a board is mounted, then they flip. */
+.results > * { animation: none !important; }
+
+#stats .stat__value:not(:has(.board)),
+#risk-level:not(:has(.board)),
+.route-chip__code:not(:has(.board)),
+.route-chip__dash:not(:has(.board)) {
+    opacity: 0;
+}
+
+@media (max-width: 1024px) {
+    .sandbox-tag,
+    .topbar__title { display: none; }
+}
+
+@media (max-width: 720px) {
+    .sandbox-rail { display: none; }
+
+    .topbar {
+        gap: var(--s2);
+        flex-wrap: nowrap;
+        overflow: hidden;
+    }
+    .topbar__right {
+        gap: var(--s2);
+        flex: none;
+        margin-left: auto;
+    }
+
+    .clock__label { display: none; }
+    .board--clock {
+        gap: 0.03em;
+    }
+
+    .board--chip { letter-spacing: .04em; }
+    .route-chip {
+        gap: 4px;
+        min-width: 0;
+        flex: 1 1 0;
+        overflow: hidden;
+    }
+    .route-chip__meta { display: none; }
+
+    .radar.scope {
+        width: min(196px, 62vw);
+        height: auto;
+        aspect-ratio: 1;
+        margin-bottom: var(--s4);
+    }
+
+    .empty { padding: 48px 12px 64px; }
+    .board--hero {
+        letter-spacing: .08em;
+        gap: 0.04em;
+    }
+
+    .board--stamp {
+        letter-spacing: .08em;
+    }
+    .board--eyebrow {
+        letter-spacing: .1em;
+    }
+    .board--arrow .board__cell { min-width: 0.7em; }
+
+    .section { padding-top: var(--s5); }
+    .section__head {
+        gap: var(--s2);
+        padding-bottom: var(--s2);
+        margin-bottom: var(--s3);
+    }
+    .section__head h2 { gap: var(--s2); }
+
+    .stat__value { gap: 4px; }
+}
+
+@media (max-width: 380px) {
+    .board--stamp { letter-spacing: .06em; }
+
+    /* Below ~380px the topbar runs out of room: menu, route, print, theme and
+       clock do not all fit, and the one that was giving way was the route —
+       "KJFK → KLAX" clipped to "KJFK → KLA". No type size rescues it, since
+       the chip would have to drop to ~9px to fit. Print is the cheapest thing
+       to lose here: it is the least likely action on the narrowest phone, the
+       briefing prints identically from any wider window, and unlike the clock
+       or the theme switch nothing about reading the page depends on it. */
+    #print-btn { display: none; }
+}
+
+@media (max-height: 480px) and (orientation: landscape) {
+    .radar.scope { width: 140px; height: 140px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .board__cell.is-flip { animation: none; }
+}

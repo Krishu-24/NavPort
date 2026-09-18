@@ -1,0 +1,88 @@
+# Tooling configuration. NavPort is not a distributable package — this file
+# exists so that lint results are the same on every machine and in CI, rather
+# than depending on whatever version of ruff happens to be installed.
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"          # the minimum the README claims to support
+
+exclude = [
+    ".venv",
+    "desktop",
+    "frontend",
+    "ui_ideas",
+]
+
+[tool.ruff.lint]
+# An explicit set, chosen for rules that catch mistakes rather than express a
+# preference. Left out on purpose: ANN (annotations aren't used consistently
+# here), D (docstring formatting), COM (trailing commas), and the various
+# complexity metrics — none of those would have caught a real bug in this
+# codebase.
+select = [
+    "E",      # pycodestyle errors
+    "F",      # pyflakes — undefined names, unused imports, real mistakes
+    "W",      # pycodestyle warnings
+    "I",      # import sorting
+    "UP",     # pyupgrade
+    "B",      # bugbear — mutable defaults, misuse of except, etc.
+    "C4",     # comprehension simplifications
+    "SIM",    # obvious simplifications
+    "RET",    # inconsistent returns
+    "PIE",    # small correctness wins
+    "S",      # bandit — actual security findings
+]
+
+ignore = [
+    "E501",    # line length is handled by the formatter, not an error
+    "S101",    # `assert` is fine in tests
+    "SIM105",  # contextlib.suppress is not clearer than try/except: pass here
+    "RET505",  # `else` after `return` often reads better
+    "B008",    # Flask and dataclass patterns rely on calls in defaults
+
+    # PEP 585 builtin generics (`dict` over `typing.Dict`). The existing
+    # codebase annotates with `Dict`/`List`/`Optional` consistently, and
+    # rewriting ~110 annotations across files that have no other reason to
+    # change would bury the real diff in noise. Worth doing as its own commit,
+    # not as a side effect.
+    "UP006",
+    "UP035",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The scripts are one-shot command-line tools. Catching broad exceptions to
+# print a readable message and exit non-zero is the correct behaviour for
+# them, and `urlopen` on a hard-coded https URL is the whole point.
+#
+# S603 is for ui_matrix.py launching a browser. The executable is either an
+# absolute path from its own candidate list or resolved through
+# `shutil.which`, and the arguments are literals — there is no untrusted
+# input in the call.
+"scripts/*" = ["BLE001", "S310", "T201", "S603"]
+
+# The smoke test deliberately makes requests to a configurable base URL and
+# asserts on the results.
+"tests/*" = ["BLE001", "S310", "T201", "S113"]
+
+# Telemetry must never be able to fail a request — a console that can't encode
+# a glyph shouldn't turn a 200 into a 500 — so the swallowed excepts there are
+# load-bearing. It also prints by design.
+"backend/telemetry.py" = ["BLE001", "T201", "S110"]
+
+# Same reasoning for the terminal-capability probes in the launcher.
+"run.py" = ["S110"]
+
+# The app-level handler exists precisely to catch everything that escaped.
+"backend/security.py" = ["BLE001"]
+
+# Binding 0.0.0.0 is required for the process to be reachable from outside a
+# container. The default is 127.0.0.1 outside production for exactly this
+# reason — see the comment on HOST.
+"backend/config.py" = ["S104"]
+
+# Deterministic simulation, documented at each call site: `random` is seeded
+# on purpose so the same route always yields the same synthetic weather.
+"backend/services/weather_service.py" = ["S311"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend"]

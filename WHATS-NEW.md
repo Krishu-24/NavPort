@@ -25,8 +25,9 @@ how it's organised, and how you run it.
 | **Briefing export** | — | Print / save as PDF, laid out as a document |
 | **Route map** | — | Live map with the path drawn in severity colours |
 | **Risk display** | Text banner | Animated arc gauge + severity breakdown |
-| **Startup** | `pip install` then `python app.py`, by hand | Double-click `run.bat` (Windows) or `run.command` (macOS/Linux) |
-| **Docs** | README only | README + `docs/ARCHITECTURE.md` |
+| **Startup** | `pip install` then `python app.py`, by hand | Double-click `run.bat` / `run.command`, or `docker compose up` |
+| **Hosting** | — | Docker image on Azure Container Apps (Consumption, scale to zero). See `docs/DEPLOYMENT.md` |
+| **Docs** | README only | README + `docs/DEPLOYMENT.md` + `docs/ARCHITECTURE.md` + `docs/SECURITY.md` |
 | **Server console** | Werkzeug's default request log | Live device / traffic telemetry |
 
 ---

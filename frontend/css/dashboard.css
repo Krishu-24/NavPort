@@ -232,6 +232,16 @@
     overflow: hidden;
     border: 1px solid var(--line);
     background: var(--surface-2);
+
+    /* Leaflet stacks its own panes from 400 up to 1000 for controls. Those
+       numbers are meant to be internal, but they only stay internal if this
+       container is a stacking context — otherwise they are resolved against
+       the page root and a tile pane at 400 paints straight over the sticky
+       topbar at 30. `position: relative` alone is not enough: an auto z-index
+       makes no context. Pinning it to 0 traps the whole map underneath the
+       chrome while keeping the container itself in its normal place. */
+    position: relative;
+    z-index: 0;
 }
 
 .map--fallback { display: grid; place-items: center; font-size: 12.5px; color: var(--ink-3); }
