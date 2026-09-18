@@ -333,10 +333,8 @@ def print_banner(app_name: str, host: str, port: int, lan_ips=None) -> None:
         lan_ips = [lan_ips]
     lan_ips = lan_ips or []
 
-    # One address per thing you might want to open, and never the same UI
-    # listed twice under two hosts. The old banner printed "New UI" once for
-    # 127.0.0.1 and again for the LAN address, which reads as two separate
-    # deployments rather than one server reachable by two names.
+    # One address per destination. There is a single UI now, so the only
+    # distinction worth drawing is which machines can reach a given address.
     rows = [
         (f"{BOLD}{WHITE}{app_name}{RESET}", ''),
         ('', ''),
@@ -345,22 +343,20 @@ def print_banner(app_name: str, host: str, port: int, lan_ips=None) -> None:
     if lan_ips:
         ip = lan_ips[0]
         rows += [
-            (f"{GREEN}New UI{RESET}",  f"{GREEN}http://{ip}:{port}/test-ui{RESET}"),
-            (f"{GREY}Old UI{RESET}",   f"{CYAN}http://{ip}:{port}/{RESET}"),
-            (f"{GREY}This PC{RESET}",  f"{CYAN}http://127.0.0.1:{port}/test-ui{RESET}"),
+            (f"{GREEN}Open{RESET}",    f"{GREEN}http://{ip}:{port}/{RESET}"),
+            (f"{GREY}This PC{RESET}",  f"{CYAN}http://127.0.0.1:{port}/{RESET}"),
             ('', ''),
-            (f"{FAINT}The first two open on this laptop and on any{RESET}", ''),
-            (f"{FAINT}phone on the same Wi-Fi - same server, same{RESET}", ''),
-            (f"{FAINT}files. 127.0.0.1 only ever means \"the machine{RESET}", ''),
-            (f"{FAINT}asking\", so a phone can never open it.{RESET}", ''),
+            (f"{FAINT}The first opens on this laptop and on any phone{RESET}", ''),
+            (f"{FAINT}on the same Wi-Fi - one server, one address.{RESET}", ''),
+            (f"{FAINT}127.0.0.1 only ever means \"the machine asking\",{RESET}", ''),
+            (f"{FAINT}so a phone can never open that one.{RESET}", ''),
         ]
     else:
         rows += [
-            (f"{GREEN}New UI{RESET}", f"{GREEN}http://127.0.0.1:{port}/test-ui{RESET}"),
-            (f"{GREY}Old UI{RESET}",  f"{CYAN}http://127.0.0.1:{port}/{RESET}"),
+            (f"{GREEN}Open{RESET}", f"{GREEN}http://127.0.0.1:{port}/{RESET}"),
             ('', ''),
-            (f"{FAINT}Listening on this machine only, so there are{RESET}", ''),
-            (f"{FAINT}no phone links. For those, start it with:{RESET}", ''),
+            (f"{FAINT}Listening on this machine only, so there is no{RESET}", ''),
+            (f"{FAINT}phone address. For one, start it with:{RESET}", ''),
             (f"{FAINT}  set NAVPORT_HOST=0.0.0.0 && run.bat{RESET}", ''),
         ]
 

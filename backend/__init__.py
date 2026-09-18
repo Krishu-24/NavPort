@@ -4,7 +4,7 @@ import logging
 import time
 from pathlib import Path
 
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, redirect, send_from_directory
 
 from backend import config
 from backend.security import install_security
@@ -63,8 +63,13 @@ def create_app() -> Flask:
     @app.route('/test-ui')
     @app.route('/test-ui/')
     def test_ui():
-        """Sandbox for UI experiments. Not the production dashboard."""
-        return send_from_directory(FRONTEND_DIR / 'test-ui', 'index.html')
+        """The preview this UI was built in, now promoted to the dashboard.
+
+        Kept only as a redirect: the address was shared around and printed in
+        the startup banner for weeks, so links to it exist on phones that will
+        never be told it moved. 301, because it is not coming back.
+        """
+        return redirect('/', code=301)
 
     @app.route('/api/health')
     def health():

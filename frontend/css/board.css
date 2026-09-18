@@ -1,25 +1,6 @@
-/* New-UI overlay for /test-ui. The live dashboard styles are unchanged.
-   Dots live on `.main` only. The rail stays a flat surface. */
-
-.sandbox-rail {
-    font-size: 12.5px;
-    line-height: 1.55;
-    color: var(--ink-3);
-}
-
-.sandbox-tag {
-    flex: none;
-    font-family: var(--mono);
-    font-size: 10.5px;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-    color: var(--ink-4);
-    text-decoration: none;
-    border: 1px solid var(--line);
-    border-radius: 99px;
-    padding: 3px 8px;
-}
-.sandbox-tag:hover { color: var(--ink); border-color: var(--ink-4); }
+/* Split-flap board and the surface it sits on.
+   Loaded after the dashboard styles so it corrects them rather than competing
+   with them on specificity. Dots live on `.main` only; the rail stays flat. */
 
 /* ---- Dotted field on the main pane only -------------------------------- */
 
@@ -473,13 +454,10 @@
 }
 
 @media (max-width: 1024px) {
-    .sandbox-tag,
     .topbar__title { display: none; }
 }
 
 @media (max-width: 720px) {
-    .sandbox-rail { display: none; }
-
     .topbar {
         gap: var(--s2);
         flex-wrap: nowrap;

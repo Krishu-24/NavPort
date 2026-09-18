@@ -1,4 +1,4 @@
-/** New-UI layer for /test-ui. Theme, clock and briefing come from /js/main.js. */
+/** Split-flap board layer. Theme, clock and briefing come from /js/main.js. */
 
 const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$<>#/+&→';
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;

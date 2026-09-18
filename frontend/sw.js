@@ -43,6 +43,7 @@ const SHELL_ASSETS = [
     '/css/dashboard.css',
     '/css/platform.css',
     '/css/print.css',
+    '/css/board.css',
     '/js/main.js',
     '/js/native.js',
     '/js/config.js',
@@ -56,6 +57,7 @@ const SHELL_ASSETS = [
     '/js/ui/recent.js',
     '/js/ui/toast.js',
     '/js/ui/offline.js',
+    '/js/ui/board.js',
     '/js/views/overview.js',
     '/js/views/risk.js',
     '/js/views/ribbon.js',
@@ -179,8 +181,8 @@ async function handleNavigation(request) {
         const response = await fetchWithTimeout(request, 4000);
         if (response && response.ok) {
             const path = new URL(request.url).pathname;
-            // Only the live dashboard is the app shell. Caching every HTML
-            // navigation under '/' would let /test-ui replace the homepage.
+            // Only the dashboard itself is the app shell. Caching every HTML
+            // navigation under '/' would let any other page replace it.
             if (path === '/' || path === '') {
                 cache.put('/', response.clone());
             }
