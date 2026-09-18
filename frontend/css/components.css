@@ -246,22 +246,6 @@
 }
 
 /* Persistent variant for layouts with room to spare */
-.ident-line { display: inline-flex; align-items: baseline; gap: 7px; min-width: 0; }
-.ident-line__code { font-family: var(--mono); font-weight: 600; color: var(--ink); letter-spacing: .03em; }
-.ident-line__iata {
-    font-family: var(--mono);
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: .06em;
-    color: var(--accent);
-}
-.ident-line__name {
-    font-size: 11.5px;
-    color: var(--ink-3);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
 
 /* ---- Flight category ------------------------------------------------------ */
 /* The standard VFR/MVFR/IFR/LIFR set. Not boxed (it isn't pressable) but given

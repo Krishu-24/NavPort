@@ -15,37 +15,14 @@
     animation: rise .4s var(--ease) both;
 }
 
-/* Scanning radar — the app is "listening" for weather */
+/* Empty-state radar. The dish itself is drawn by css/board.css as
+   `.radar.scope`; this only reserves its place in the column. */
 .radar {
     position: relative;
     width: 150px; height: 150px;
     display: grid;
     place-items: center;
     margin-bottom: var(--s5);
-}
-
-.radar__ring {
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    border: 1px solid var(--line);
-}
-
-.radar__ring:nth-child(2) { inset: 25px; }
-.radar__ring:nth-child(3) { inset: 50px; }
-
-.radar__sweep {
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    background: conic-gradient(from 0deg, transparent 0deg, var(--accent-tint) 46deg, transparent 84deg);
-    animation: spin 3.8s linear infinite;
-}
-
-.radar__core {
-    position: relative;
-    width: 30px; height: 30px;
-    color: var(--accent);
 }
 
 .empty h2 { font-size: 18px; margin-bottom: 7px; }

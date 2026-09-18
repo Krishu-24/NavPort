@@ -385,7 +385,6 @@ html.is-native .topbar .route-chip {
         scroll-behavior: auto !important;
     }
 
-    .radar__sweep,
     .scanline {
         display: none;
     }

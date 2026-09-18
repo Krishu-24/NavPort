@@ -62,13 +62,3 @@ export function ident(code, { className = '' } = {}) {
         ),
     );
 }
-
-/** Code plus its name as persistent secondary text, for roomier layouts. */
-export function identLine(code) {
-    const a = identity(code);
-    return el('span', { class: 'ident-line' },
-        el('span', { class: 'ident-line__code' }, (code || '—').toUpperCase()),
-        a?.iata ? el('span', { class: 'ident-line__iata' }, a.iata) : null,
-        a?.name ? el('span', { class: 'ident-line__name' }, a.name) : null,
-    );
-}

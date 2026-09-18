@@ -1,4 +1,18 @@
+# Pinned exactly so a rebuilt venv and a rebuilt image get the same bytes.
+# Versions below are the lowest that carry the fixes noted against them; bump
+# freely, but do not drop back past these.
+
 Flask==2.3.3
-Flask-CORS==4.0.0
-requests==2.31.0
-gunicorn==21.2.0
+
+# 4.0.1 fixed CVE-2024-6221, where Access-Control-Allow-Private-Network was
+# sent as true regardless of configuration, and CVE-2024-1681 (log injection).
+Flask-CORS==4.0.2
+
+# 2.32.0 fixed CVE-2024-35195: once a Session made a request with verify=False,
+# every later request to that host silently skipped verification too. 2.32.4
+# adds the fix for CVE-2024-47081, a .netrc credential leak on crafted URLs.
+requests==2.32.4
+
+# 22.0.0 fixed CVE-2024-1135, request smuggling via conflicting Transfer-
+# Encoding headers, which matters because gunicorn is what serves production.
+gunicorn==23.0.0
