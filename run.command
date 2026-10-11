@@ -3,8 +3,8 @@
 #  NavPort launcher (macOS / Linux)
 #  - Verifies Python 3.9+ is installed
 #  - Creates a virtual environment (.venv) if one doesn't exist
-#  - Installs dependencies only if requirements.txt changed
-#  - Starts the Flask server
+#  - Installs the API's dependencies only if they changed
+#  - Starts the dashboard (port 8080) and the API (port 8000)
 #  Double-click in Finder, or run: ./run.command
 # ============================================================
 
@@ -67,23 +67,25 @@ fi
 [ -x "$VENV_PY" ] || die "Virtual environment python not found at $VENV_PY"
 say ""
 
-# ---- 3. Install dependencies only if requirements.txt changed --------
+# ---- 3. Install dependencies only if they changed --------------------
+# Only the API has Python dependencies; the dashboard is static files.
+REQUIREMENTS="backend/requirements.txt"
 LOCK_FILE="$VENV_DIR/requirements.lock"
 
-if [ -f "$LOCK_FILE" ] && cmp -s requirements.txt "$LOCK_FILE"; then
+if [ -f "$LOCK_FILE" ] && cmp -s "$REQUIREMENTS" "$LOCK_FILE"; then
     ok "Dependencies already installed and up to date - skipping."
 else
-    step "Installing dependencies from requirements.txt ..."
+    step "Installing dependencies from $REQUIREMENTS ..."
     "$VENV_PY" -m pip install --upgrade pip --quiet
-    "$VENV_PY" -m pip install -r requirements.txt || die "Failed to install dependencies.
+    "$VENV_PY" -m pip install -r "$REQUIREMENTS" || die "Failed to install dependencies.
         Check your internet connection and try again."
-    cp requirements.txt "$LOCK_FILE"
+    cp "$REQUIREMENTS" "$LOCK_FILE"
     ok "Dependencies installed."
 fi
 say ""
 
 # ---- 4. Start the server ---------------------------------------------
-# Opt in to development mode explicitly. Every default in backend/config.py is
+# Opt in to development mode explicitly. Every default in backend/navport/config.py is
 # the production-safe one, so forgetting to set anything can never be what
 # leaves the debugger exposed. This is the one place that relaxes it:
 # auto-reload, console telemetry, and binding to the LAN so a phone on the
@@ -93,12 +95,14 @@ export NAVPORT_DEBUG=true
 export NAVPORT_HOST=0.0.0.0
 
 say "${BOLD}================================================${RESET}"
-say "${BOLD}  Starting NavPort on http://localhost:5000${RESET}"
-say "${BOLD}  Press CTRL+C to stop the server.${RESET}"
+say "${BOLD}  Starting NavPort: dashboard on http://localhost:8080${RESET}"
+say "${BOLD}                     API on       http://localhost:8000${RESET}"
+say "${BOLD}  Press CTRL+C to stop both.${RESET}"
 say "${BOLD}================================================${RESET}"
 say ""
 
-"$VENV_PY" run.py
+# Two servers, one terminal: scripts/dev.py runs both and stops both on Ctrl+C.
+"$VENV_PY" scripts/dev.py
 STATUS=$?
 
 say ""
@@ -109,4 +113,4 @@ if [ $STATUS -ne 0 ] && [ $STATUS -ne 130 ]; then   # 130 = CTRL+C
     exit $STATUS
 fi
 
-say "NavPort server stopped."
+say "NavPort stopped."

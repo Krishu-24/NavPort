@@ -1,29 +1,34 @@
-# Local Docker run — the same image that gets deployed to Azure, so a problem
-# shows up here rather than in the cloud. This file is not used by Azure;
-# Azure pulls the image from ghcr.io and applies its own CPU/RAM/env.
+# NavPort, both halves, as two containers:
 #
 #   docker compose up --build
-#   -> http://localhost:8000  and  /api/health
+#   -> http://localhost:8080             the dashboard   (frontend container, nginx)
+#   -> http://localhost:8000/api/health  the API it calls (backend container, gunicorn)
 #
-# The resource limits mirror an Azure Container Apps 0.5 vCPU / 1 GiB replica.
-# Testing under the same ceiling as production is the point: an image that
-# only works with unlimited memory locally will be OOM-killed up there.
+# The same split production uses: the API on Azure Container Apps, the
+# dashboard on Azure Static Web Apps. Azure doesn't read this file — the API
+# image is pulled from Docker Hub, and Static Web Apps serves the files
+# directly — but running the two here, with production settings, is how a
+# problem shows up on a laptop rather than in the cloud.
 
 services:
-  navport:
+  backend:
     build:
-      context: .
-      dockerfile: Dockerfile
-    image: navport:local
-    container_name: navport
+      context: ./backend
+    image: navport-backend:local
+    container_name: navport-backend
     ports:
       - "8000:8000"
     environment:
       NAVPORT_ENV: production
       PORT: "8000"
-      # Azure's ingress sets X-Forwarded-For. Nothing does here, so leaving
-      # this on would let any client spoof its address past the rate limiter.
+      # Azure's ingress sets X-Forwarded-For. Nothing does here, so trusting it
+      # would let any client spoof its address past the rate limiter.
       NAVPORT_TRUST_PROXY: "false"
+      # The dashboard is another origin, so the API must name it before the
+      # browser will hand it any responses. In production this is the Static
+      # Web App's address — the same setting, which is the point of setting it
+      # here.
+      NAVPORT_CORS_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080"
       WEB_CONCURRENCY: "2"
       NAVPORT_THREADS: "8"
     restart: unless-stopped
@@ -40,6 +45,8 @@ services:
     cap_drop:
       - ALL
 
+    # Mirrors one Azure Container Apps replica (0.5 vCPU / 1 GiB). An image that
+    # only works with unlimited memory locally would be OOM-killed up there.
     deploy:
       resources:
         limits:
@@ -52,3 +59,32 @@ services:
       timeout: 5s
       start_period: 15s
       retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+    image: navport-frontend:local
+    container_name: navport-frontend
+    ports:
+      - "8080:8080"
+    # The dashboard is usable without the API (it shows its empty state), but
+    # starting it first would only produce a page whose first request fails.
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+    read_only: true
+    tmpfs:
+      # The unprivileged nginx image keeps its pid file and temp buffers here.
+      - /tmp:size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M

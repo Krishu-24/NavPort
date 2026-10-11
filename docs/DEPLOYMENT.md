@@ -1,5 +1,13 @@
 # Deploying NavPort (Docker + Azure)
 
+> **Being rewritten.** NavPort is now two services — the API as a Docker image
+> on Docker Hub, run by Azure Container Apps, and the dashboard on Azure Static
+> Web Apps — each deployed by its own GitHub Actions workflow
+> (`.github/workflows/backend.yml`, `frontend.yml`). The steps below describe
+> the earlier single-container setup (one image serving both, stored on
+> ghcr.io) and are kept until the new guide replaces them. The README's
+> "How to Run" section is current.
+
 This is the **deployment** path. NavPort is a Flask app plus a static
 frontend. Azure will not run `run.bat`. It runs a **Linux container** built
 from the [Dockerfile](../Dockerfile). The public website *is* that container:

@@ -29,7 +29,7 @@ except ImportError:
     print("Pillow is required: python -m pip install pillow", file=sys.stderr)
     sys.exit(1)
 
-OUT = Path(__file__).resolve().parent.parent / "frontend" / "assets" / "icons"
+OUT = Path(__file__).resolve().parent.parent / "frontend" / "public" / "assets" / "icons"
 
 BRAND = (27, 74, 124)          # --accent  #1B4A7C
 MARK = (255, 255, 255)

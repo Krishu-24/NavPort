@@ -10,17 +10,28 @@ than to claim a clean bill of health.
 
 ## How this was tested
 
-`tests/smoke_test.py` is the evidence. It asserts that malformed input gets a
-4xx rather than a 500, that error bodies carry no internal detail, that the
-security headers are present, and that the rate limiter fires. It runs in CI
-on every push.
+Two end-to-end tests are the evidence, one per service. Both run in CI on
+every push, against the development servers and against the Docker containers.
 
-The first run against the original code: **24 passed, 18 failed.** After the
-work below: **65 passed, 0 failed.**
+- `backend/tests/api_test.py` asserts that malformed input gets a 4xx rather
+  than a 500, that error bodies carry no internal detail, that the API's
+  security headers are present, that CORS admits the dashboard and nobody
+  else, and that the rate limiter fires.
+- `frontend/tests/site_test.py` asserts the dashboard's headers and
+  Content-Security-Policy, content types, compression, and that every file the
+  service worker needs exists. The frontend workflow also runs it against the
+  live site after every deploy.
+
+History: the first run of the original combined smoke test against the
+original code was **24 passed, 18 failed**; after the fixes below it was 65
+passed. After the dashboard and API were split into two services, the API test
+passes **56/56** and the dashboard test **40/40** — and the dashboard test,
+pointed at the deployed site before its headers were restored (§12), scored
+**31 passed, 9 failed**.
 
 ```bash
-python tests/smoke_test.py            # against a local server
-python tests/smoke_test.py https://your-deployment/
+python backend/tests/api_test.py https://your-api/
+python frontend/tests/site_test.py https://your-dashboard/
 ```
 
 ---
@@ -45,10 +56,13 @@ The default `flask-cors` configuration sends
 API using a visitor's browser and IP, spending our upstream quota and
 bypassing the rate limit by spreading load across real users.
 
-**Fix.** An explicit allowlist, confined to `/api/*`. It contains only the
-native shell origins (`tauri://localhost`, `capacitor://localhost` and
-friends), which genuinely are cross-origin. The web build is same-origin and
-needs no CORS at all. Extra origins go in `NAVPORT_CORS_ORIGINS`.
+**Fix.** An explicit allowlist, confined to `/api/*`: the native shell
+origins (`tauri://localhost`, `capacitor://localhost` and friends), plus
+whatever `NAVPORT_CORS_ORIGINS` names. Since the dashboard moved to its own
+host it is cross-origin too, so its exact address has to be in that variable
+— and nothing else does. `api_test.py` checks both halves: the dashboard's
+origin is granted (including the preflight a JSON `POST` needs), and an
+unknown origin gets no `Access-Control-Allow-Origin` at all.
 
 ### 3. Exception strings returned to the client
 
@@ -59,8 +73,8 @@ filesystem paths, the upstream URL and its parameters, internal hostnames.
 **Fix.** A single `Exception` handler logs the full traceback server-side and
 returns an opaque `{"error": "Internal server error"}`. Client errors raise
 `validation.BadRequest`, whose message is written to be safe to show. The
-smoke test asserts that error bodies contain no `Traceback`, no `File "`, no
-`backend/` and no `site-packages`.
+API test asserts that error bodies contain no `Traceback`, no `File "`, no
+`navport/`, no `backend/` and no `site-packages`.
 
 ### 4. Unvalidated identifiers reached the upstream query string
 
@@ -70,7 +84,7 @@ url-encodes parameters, so this was not exploitable as injection, but it was
 one refactor away from being so, and it let arbitrary strings out to a third
 party.
 
-**Fix.** `backend/validation.py` enforces `^[A-Z0-9]{4}$` on every identifier
+**Fix.** `backend/navport/validation.py` enforces `^[A-Z0-9]{4}$` on every identifier
 before it is used. Nothing that isn't shaped like an ICAO code gets out.
 
 ### 5. Bad input produced 500s
@@ -79,8 +93,9 @@ An empty POST body, a null identifier, or `cruise_speed: "fast"` all raised
 `AttributeError` or `ValueError` and came back as 500s. Beyond being wrong,
 each one was a path where an unhandled exception message was returned.
 
-**Fix.** Every field is validated up front. Ten such cases are asserted in
-the smoke test; all now return 400 with a message that says what was wrong.
+**Fix.** Every field is validated up front. Over a dozen such cases are
+asserted in the API test; all return 400 (or 405 for the wrong method) with a
+message that says what was wrong.
 
 ### 6. No rate limiting
 
@@ -88,7 +103,7 @@ One briefing fans out into seven concurrent calls to a free public API. There
 was nothing to stop a script turning that into thousands, which is how a
 deployment gets blocked by the upstream provider.
 
-**Fix.** A sliding-window limiter in `backend/security.py` — 60 requests and
+**Fix.** A sliding-window limiter in `backend/navport/security.py` — 60 requests and
 10 briefings per minute per IP by default. See the caveat below.
 
 ### 7. No security headers
@@ -97,8 +112,15 @@ deployment gets blocked by the upstream provider.
 `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
 `Permissions-Policy`, `Cross-Origin-Opener-Policy`, and HSTS in production.
 
-The CSP allows no inline JavaScript. That required moving the one inline
-script into `frontend/js/native.js` rather than weakening the policy —
+Each service now sends its own. The API returns only JSON, so its policy
+permits nothing: `default-src 'none'; frame-ancestors 'none'`. The dashboard's
+policy has to allow its own scripts, the map tiles and the API, and lives in
+`frontend/public/staticwebapp.config.json` (see §12).
+
+The dashboard's CSP allows no inline JavaScript. That required moving the one
+inline script into `frontend/public/js/native.js` rather than weakening the
+policy, and later putting the API's address in its own file
+(`js/api-config.js`) rather than an inline `<script>` —
 `'unsafe-inline'` on `script-src` would have made the whole policy close to
 decorative. Inline *styles* are still allowed, because Leaflet sets them on
 every tile as it positions them; that half of the policy is much less load
@@ -109,8 +131,17 @@ bearing.
 Responses advertised `Server: Werkzeug/3.1.8 Python/3.11.9` — an exact
 version pair to match against a CVE list.
 
-**Fix.** `Server: NavPort`. Gunicorn honours the app's header; the
-development server needed the handler overriding in `run.py`.
+**Fix.** `Server: NavPort`.
+
+The first version of this fix set the header in the application and assumed
+gunicorn would pass it through. It doesn't: gunicorn treats `Server` (like
+`Date`) as its own, drops whatever the application set, and writes
+`Server: gunicorn` — which is what the deployed API was sending the whole time.
+That surfaced only when the API test was tightened to check the header on the
+gunicorn container rather than just the development server. Gunicorn's name is
+now set in `backend/gunicorn.conf.py`; the development server's handler is
+overridden in `backend/wsgi.py`; the dashboard's nginx container sets
+`server_tokens off`. Both tests fail if a version number reappears.
 
 ### 9. Third-party code loaded from CDNs at runtime
 
@@ -129,8 +160,8 @@ entire job is showing weather along a route. SRI cannot help with that, and
 neither can a retry: the bundled desktop and mobile apps are expected to open
 without a network at all.
 
-**Fix.** All of it is vendored into `frontend/vendor/` and served from our own
-origin. `scripts/vendor_assets.py` downloads the pinned versions, verifies
+**Fix.** All of it is vendored into `frontend/public/vendor/` and served from
+the dashboard's own origin. `scripts/vendor_assets.py` downloads the pinned versions, verifies
 each against a recorded SHA-384 before writing, and runs in CI with `--check`
 to confirm the committed copies still match upstream.
 
@@ -138,15 +169,18 @@ This also collapsed the policy. `script-src` and `font-src` are now plain
 `'self'` with no host list, so an injected `<script src>` pointing anywhere
 at all is refused rather than being weighed against an allowlist. The only
 remaining cross-origin request in the whole app is the Esri basemap tile
-service in `img-src`, and the smoke test asserts that `index.html` loads no
-third-party scripts or styles so this cannot quietly regress.
+service in `img-src` (plus the API in `connect-src`), and the dashboard test
+asserts that `index.html` loads no third-party scripts or styles so this cannot
+quietly regress.
 
 ### 10. Container ran as root
 
-**Fix.** A fixed unprivileged uid/gid (10001), dependencies built in a
-separate stage so no compiler ships in the runtime image, `read_only` root
-filesystem, `cap_drop: ALL` and `no-new-privileges` in compose. CI asserts
-the running container's uid is not 0.
+**Fix.** The API image runs as a fixed unprivileged uid/gid (10001), with
+dependencies built in a separate stage so no compiler ships in the runtime
+image. The dashboard's local nginx image uses the unprivileged variant (uid
+101, port 8080, since binding 80 needs root). Both run with a `read_only` root
+filesystem, `cap_drop: ALL` and `no-new-privileges` in compose, and CI asserts
+that neither running container's uid is 0.
 
 ### 11. Thread-unsafe global random state
 
@@ -159,6 +193,32 @@ provide.
 **Fix.** A private `random.Random(seed)` instance per call. Not a security
 hole, but a correctness bug that only appears under concurrency, which is
 exactly the condition production runs in.
+
+### 12. The dashboard lost its security headers when it moved hosts
+
+Splitting the dashboard out of the Flask app and onto Azure Static Web Apps
+quietly removed every protection in §7 from the page itself. Those headers had
+been added by the Flask process that served the HTML; Static Web Apps serves
+the files directly and only adds three defaults of its own. The live dashboard
+had no Content-Security-Policy and no `X-Frame-Options`, and nothing looked
+wrong — the page worked exactly as before. The same check found
+`manifest.webmanifest` served as `application/octet-stream`, which lets a
+browser ignore the manifest and breaks "install as an app".
+
+It was found by inspecting the live response headers after the move, and
+confirmed by the new dashboard test: **31 passed, 9 failed** against the
+deployed site.
+
+**Fix.** The dashboard's headers, MIME types and cache rules now live with the
+dashboard, in `frontend/public/staticwebapp.config.json`, which Static Web
+Apps applies directly. The local development server and the nginx container
+generate their headers from that same file (`frontend/tools/site.py`), so the
+three can't drift apart. The policy's `connect-src` names the API, whose
+address differs per environment, so the committed file holds a placeholder
+that `site.py configure` fills at deploy time — and the dashboard test fails
+if the placeholder ever reaches production unfilled. The frontend workflow
+runs that test against the live site after every deploy, so this class of
+problem can't come back silently.
 
 ---
 
@@ -199,7 +259,7 @@ the rate limiter. Anything storing user data would need real auth first.
 
 Real NOTAM feeds require an authenticated or paid API. The generated ones are
 labelled `"source": "Demo Data (Time-Based)"` in every response, and the
-smoke test asserts that label is present on all of them, so this cannot
+API test asserts that label is present on all of them, so this cannot
 quietly start looking like live data.
 
 ### Weather outside the API's real-time window is simulated
@@ -209,11 +269,21 @@ Deterministically derived from the nearest real observation. Also labelled.
 
 ### Dependencies are pinned but not automatically updated
 
-`requirements.txt` pins exact versions, which makes builds reproducible and
-means a compromised upstream release is not picked up silently. The flip side
-is that security patches are not picked up either. Trivy scans the image in
-CI and reports HIGH and CRITICAL findings; enabling Dependabot would close
-the loop.
+`backend/requirements.txt` pins exact versions, which makes builds
+reproducible and means a compromised upstream release is not picked up
+silently. The flip side is that security patches are not picked up either: an
+audit found three pinned packages carrying published advisories —
+Flask-CORS 4.0.0 (CVE-2024-6221), requests 2.31.0 (CVE-2024-35195) and
+gunicorn 21.2.0 (CVE-2024-1135) — all since upgraded. Trivy scans the image on
+every backend deploy and reports HIGH and CRITICAL findings; enabling
+Dependabot would close the loop.
+
+That scan is newer than it looks. The deploy workflow referenced
+`aquasecurity/trivy-action@0.28.0`, a tag that does not exist, so GitHub could
+not fetch the action and the whole job failed at "Set up job" on every push —
+nothing was scanned, and no image was ever published, while the workflow
+file read as though both happened. Third-party actions are now pinned to a
+commit hash rather than a tag: a tag can be moved or deleted, a commit cannot.
 
 ---
 
@@ -228,7 +298,7 @@ tool whose output is a go/no-go risk assessment, a stale answer that looks
 current is worse than no answer.
 
 So when the network drops, NavPort says so — a persistent banner, and nothing
-rendered from cache. `frontend/sw.js` and `frontend/offline.html` both carry
+rendered from cache. `frontend/public/sw.js` and `frontend/public/offline.html` both carry
 this reasoning inline so it doesn't get "optimised" away later.
 
 ---

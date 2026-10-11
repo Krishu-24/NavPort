@@ -5,8 +5,8 @@
   "identifier": "com.navport.app",
 
   "build": {
-    "devUrl": "http://localhost:5000",
-    "frontendDist": "../../frontend"
+    "devUrl": "http://localhost:8080",
+    "frontendDist": "../../frontend/public"
   },
 
   "app": {
@@ -31,7 +31,7 @@
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self'",
         "img-src": "'self' asset: http://asset.localhost data: blob: https://services.arcgisonline.com",
-        "connect-src": "'self' ipc: http://ipc.localhost http://localhost:5000 http://127.0.0.1:5000 https://*.azurecontainerapps.io https://*.azurewebsites.net",
+        "connect-src": "'self' ipc: http://ipc.localhost http://localhost:8000 http://127.0.0.1:8000 https://*.azurecontainerapps.io https://*.azurewebsites.net",
         "object-src": "'none'",
         "base-uri": "'self'",
         "frame-ancestors": "'none'"

@@ -2,7 +2,11 @@
 setlocal enabledelayedexpansion
 
 REM ============================================================
-REM  NavPort launcher
+REM  NavPort launcher (Windows)
+REM  - Checks for Python 3.9+
+REM  - Creates .venv if it doesn't exist
+REM  - Installs the API's dependencies only when they've changed
+REM  - Starts the dashboard (port 8080) and the API (port 8000)
 REM ============================================================
 
 cd /d "%~dp0"
@@ -60,11 +64,13 @@ if not exist "%VENV_PY%" (
 )
 
 REM ---- 3. Dependencies ------------------------------------------------
+REM  Only the API has Python dependencies; the dashboard is static files.
+set "REQUIREMENTS=%~dp0backend\requirements.txt"
 set "LOCK_FILE=%VENV_DIR%\requirements.lock"
 set "NEED_INSTALL=1"
 
 if exist "%LOCK_FILE%" (
-    fc /b "%~dp0requirements.txt" "%LOCK_FILE%" >nul 2>nul
+    fc /b "%REQUIREMENTS%" "%LOCK_FILE%" >nul 2>nul
     if not errorlevel 1 set "NEED_INSTALL=0"
 )
 
@@ -73,24 +79,28 @@ if "%NEED_INSTALL%"=="0" (
 ) else (
     echo [..] Installing dependencies ...
     "%VENV_PY%" -m pip install --upgrade pip -q
-    "%VENV_PY%" -m pip install -r "%~dp0requirements.txt"
+    "%VENV_PY%" -m pip install -r "%REQUIREMENTS%"
     if errorlevel 1 (
         echo [ERROR] Failed to install dependencies.
         pause
         exit /b 1
     )
-    copy /y "%~dp0requirements.txt" "%LOCK_FILE%" >nul
+    copy /y "%REQUIREMENTS%" "%LOCK_FILE%" >nul
     echo [OK] Dependencies installed
 )
 
 echo.
 
 REM ---- 4. Start -------------------------------------------------------
+REM  Development mode is opted into here, explicitly. Every default in
+REM  backend\navport\config.py is the production-safe one, so forgetting to
+REM  set something can never be what leaves the debugger exposed.
 set "NAVPORT_ENV=development"
 set "NAVPORT_DEBUG=true"
 set "NAVPORT_HOST=0.0.0.0"
 
-"%VENV_PY%" "%~dp0run.py"
+REM  Two servers, one window: scripts\dev.py runs both and stops both on Ctrl+C.
+"%VENV_PY%" "%~dp0scripts\dev.py"
 set "SERVER_EXIT=%errorlevel%"
 
 echo.

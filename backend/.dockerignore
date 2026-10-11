@@ -1,0 +1,25 @@
+# The build context is backend/. Only what the image needs goes in: the
+# navport/ package, wsgi.py, gunicorn.conf.py and requirements.txt. This
+# matters for more than size — anything copied in is readable by anyone who
+# pulls the image.
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Python build/run debris
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Tests run in CI against the built image; they aren't part of it
+tests/
+
+# The image's own recipe
+Dockerfile
+.dockerignore

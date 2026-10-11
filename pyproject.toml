@@ -6,10 +6,12 @@
 line-length = 120
 target-version = "py39"          # the minimum the README claims to support
 
+# frontend/public is the static site. frontend/tools and frontend/tests are
+# Python and are linted like everything else.
 exclude = [
     ".venv",
     "desktop",
-    "frontend",
+    "frontend/public",
     "ui_ideas",
 ]
 
@@ -62,27 +64,33 @@ ignore = [
 
 # The smoke test deliberately makes requests to a configurable base URL and
 # asserts on the results.
-"tests/*" = ["BLE001", "S310", "T201", "S113"]
+"backend/tests/*" = ["BLE001", "S310", "T201", "S113"]
+"frontend/tests/*" = ["BLE001", "S310", "T201", "S113"]
 
 # Telemetry must never be able to fail a request — a console that can't encode
 # a glyph shouldn't turn a 200 into a 500 — so the swallowed excepts there are
 # load-bearing. It also prints by design.
-"backend/telemetry.py" = ["BLE001", "T201", "S110"]
+"backend/navport/telemetry.py" = ["BLE001", "T201", "S110"]
 
 # Same reasoning for the terminal-capability probes in the launcher.
-"run.py" = ["S110"]
+"backend/wsgi.py" = ["S110"]
+
+# The dashboard's toolbox is a command-line tool: it prints by design, and its
+# dev server binds whatever host the launcher passes (0.0.0.0 for phone access
+# on the LAN, in development only).
+"frontend/tools/*" = ["T201", "S104"]
 
 # The app-level handler exists precisely to catch everything that escaped.
-"backend/security.py" = ["BLE001"]
+"backend/navport/security.py" = ["BLE001"]
 
 # Binding 0.0.0.0 is required for the process to be reachable from outside a
 # container. The default is 127.0.0.1 outside production for exactly this
 # reason — see the comment on HOST.
-"backend/config.py" = ["S104"]
+"backend/navport/config.py" = ["S104"]
 
 # Deterministic simulation, documented at each call site: `random` is seeded
 # on purpose so the same route always yields the same synthetic weather.
-"backend/services/weather_service.py" = ["S311"]
+"backend/navport/services/weather_service.py" = ["S311"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["backend"]
+known-first-party = ["navport"]

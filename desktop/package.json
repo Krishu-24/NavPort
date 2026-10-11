@@ -17,7 +17,7 @@
     "ios:dev": "tauri ios dev",
     "ios:build": "tauri ios build",
 
-    "icons": "tauri icon ../frontend/assets/icon.png",
+    "icons": "tauri icon ../frontend/public/assets/icon.png",
     "info": "tauri info",
     "tauri": "tauri"
   },

@@ -5,11 +5,21 @@ and NavPort pulls live METARs, TAFs, PIREPs, SIGMETs, G-AIRMETs and CWAs
 along the flight path, builds a 15-minute interval timeline, and produces a
 plain-English briefing with an automated risk assessment.
 
+NavPort is two services:
+
+- **the API** (`backend/`) — a Flask REST API that gathers and analyses the
+  weather, packaged as a Docker image and hosted on **Azure Container Apps**;
+- **the dashboard** (`frontend/`) — a static web app that calls that API,
+  hosted on **Azure Static Web Apps**.
+
+They are built, tested and deployed independently, each by its own GitHub
+Actions workflow.
+
 ## How to Run
 
-There are two ways. **Python** is for developing on your laptop.
-**Docker** is the shape that gets hosted on Azure — same image, same port,
-same memory cap. The assignment path is Docker, then
+There are two ways. **Python** is for developing on your laptop. **Docker**
+runs the same two services as two containers, with production settings — the
+shape that gets hosted on Azure. Hosting steps are in
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ### Local development (Python)
@@ -23,13 +33,16 @@ Either one will:
 
 1. Check that Python 3.9+ is installed (and tell you where to get it if not).
 2. Create a virtual environment in `.venv/` — skipped if one already exists.
-3. Install dependencies from `requirements.txt` — skipped if they're already
-   up to date.
-4. Start the Flask dev server on `http://localhost:5000` (debugger and LAN
-   bind are opted into explicitly; production defaults stay safe).
+3. Install the API's dependencies from `backend/requirements.txt` — skipped if
+   they're already up to date.
+4. Start both services and print where to open them:
+   - the dashboard on **http://localhost:8080**
+   - the API on **http://localhost:8000** (its debugger, auto-reload and LAN
+     access are opted into explicitly; production defaults stay safe)
 
-Re-running is always safe after a `git pull`. On macOS, if double-clicking
-opens a text editor, run `chmod +x run.command` once, or `./run.command`.
+Ctrl+C stops both. Re-running is always safe after a `git pull`. On macOS, if
+double-clicking opens a text editor, run `chmod +x run.command` once, or
+`./run.command`.
 
 Manual equivalent:
 
@@ -37,41 +50,41 @@ Manual equivalent:
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 # macOS / Linux: source .venv/bin/activate
-pip install -r requirements.txt
-python run.py
+pip install -r backend/requirements.txt
+NAVPORT_ENV=development python scripts/dev.py
 ```
 
-### What you deploy (Docker)
+### Both services in Docker
 
-This is the production image Azure will run. Install
-[Docker Desktop](https://www.docker.com/products/docker-desktop/), then from
-this folder:
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/),
+then from this folder:
 
 ```bash
 docker compose up --build
 ```
 
-Open **http://localhost:8000** and **http://localhost:8000/api/health**.
-`"status":"ok"` means gunicorn started and the airport database loaded.
+Two containers start:
 
-Compose uses 0.5 CPU / 1 GB — the same size as a free Azure Container Apps
-replica — so an out-of-memory problem shows up here. Full hosting steps
-(registry, Container Apps, free-tier limits) are in
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+| Container | Serves | Open |
+|---|---|---|
+| `navport-frontend` | the dashboard, via nginx | **http://localhost:8080** |
+| `navport-backend` | the API, via gunicorn | **http://localhost:8000/api/health** |
 
-Do **not** use Azure App Service F1: it cannot run this custom image. Do
-**not** use Azure Container Registry: it is not free. Store the image on
-GitHub Container Registry (`ghcr.io`).
+The backend runs in production mode, so the dashboard reaches it only because
+`docker-compose.yml` names the dashboard's origin in `NAVPORT_CORS_ORIGINS` —
+the same setting the Azure deployment needs. The backend is capped at
+0.5 CPU / 1 GB, the size of a free Azure Container Apps replica, so an
+out-of-memory problem shows up here rather than in the cloud.
 
 ## Documentation Hub
 
 | Doc | What's in it |
 |---|---|
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Start here for hosting.** Docker locally, why Container Apps, ghcr.io, Azure create commands, free-tier math |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Request flow, module map, why the backend is split the way it is |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Start here for hosting.** Docker Hub, Azure Container Apps, Azure Static Web Apps, GitHub Actions, and why it all costs nothing |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Request flow, the two services and how they talk, module map, design rationale |
 | [docs/SECURITY.md](docs/SECURITY.md) | Issues found while hardening, what fixed them, known limitations |
-| [desktop/README.md](desktop/README.md) | Optional: Tauri installers that call the Azure URL. Not required for deployment |
-| This README | Local run, features, API, layout |
+| [desktop/README.md](desktop/README.md) | Optional: Tauri installers that call the hosted API |
+| This README | Running it, features, the API, layout |
 
 ## What You Get
 
@@ -93,18 +106,25 @@ GitHub Container Registry (`ghcr.io`).
 | **Charts** | Wind (sustained + gusts) and visibility, colour-banded by aviation minimums |
 | **Printable briefing** | Print or save the whole briefing as a PDF, laid out as a document with a header and no page-split rows |
 | **Recent routes** | The last five routes you analysed, one click to re-run |
-| **Responsive dashboard UI** | Light and dark themes, animated risk gauge, skeleton loading states, off-canvas flight plan on mobile |
+| **Responsive dashboard UI** | Split-flap display, light and dark themes, animated risk gauge, skeleton loading states, off-canvas flight plan on mobile |
 
 ## Architecture at a Glance
 
 ```
-Browser (frontend/)  ──▶  Flask (backend/routes/)  ──▶  WeatherProcessor (backend/services/)
-                                                              │
-                                                              ▼
-                                            aviationweather.gov/api/data
-                                     (METAR · TAF · PIREP · SIGMET · G-AIRMET · CWA)
+ Browser
+   │  loads the page                          │  calls the API (CORS)
+   ▼                                          ▼
+ Dashboard — frontend/                      API — backend/
+ Azure Static Web Apps                      Azure Container Apps (Docker)
+ static HTML / CSS / ES modules             Flask + gunicorn, REST/JSON
+                                              │  ~7 concurrent calls per briefing
+                                              ▼
+                                   aviationweather.gov/api/data
+                            (METAR · TAF · PIREP · SIGMET · G-AIRMET · CWA)
 ```
 
+The dashboard and the API are on different origins, so every call the
+dashboard makes is a cross-origin request that the API has to allow by name.
 Full request flow, module responsibilities and design rationale are in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -112,64 +132,72 @@ Full request flow, module responsibilities and design rationale are in
 
 ```
 NavPort/
-├── run.bat                    # Windows one-click launcher
-├── run.command                # macOS / Linux one-click launcher
-├── run.py                     # Entry point (python run.py)
-├── requirements.txt
-├── pyproject.toml             # Ruff config
-├── Dockerfile                 # What Azure runs: two-stage, non-root, gunicorn
-├── docker-compose.yml         # Same image locally, 0.5 CPU / 1 GB like Azure
-├── gunicorn.conf.py           # Production WSGI (used inside the container)
-├── .env.example               # Names of the env vars compose/Azure set
-├── WHATS-NEW.md               # What changed from the previous version
-├── backend/
-│   ├── __init__.py            # Flask app factory, /api/health
-│   ├── config.py              # Settings, production-safe defaults
-│   ├── security.py            # Headers, rate limiting, gzip, error handling
-│   ├── validation.py          # Input validation — bad input is 4xx, not 500
-│   ├── cache.py               # TTL cache for upstream weather calls
-│   ├── telemetry.py           # Live console device/traffic reporting
-│   ├── models/pirep.py        # PIREP dataclass + raw-text parsing
-│   ├── services/              # flight_rules · pirep · nlp · weather · airports
-│   └── routes/                # /api/* Flask blueprints
-├── frontend/
-│   ├── index.html
-│   ├── manifest.webmanifest   # PWA install metadata
-│   ├── sw.js                  # Service worker — shell cached, weather never
-│   ├── offline.html           # Shown when there is no connection
-│   ├── css/                   # tokens · layout · components · dashboard · platform · print
-│   ├── js/
-│   │   ├── main.js            # ES module entry point
-│   │   ├── config.js          # Resolves the API base URL for packaged apps
-│   │   ├── native.js          # Native-shell detection, runs before first paint
-│   │   ├── core/              # api · state · dom · format · idents
-│   │   ├── ui/                # shell · theme · recent · toast · offline
-│   │   └── views/             # overview · risk · ribbon · map · charts · notams · timeline · alternates · pireps
-│   ├── vendor/                # Leaflet, Chart.js, IBM Plex — served from our own origin
-│   └── assets/                # icon.png + generated icon set
-├── desktop/                   # Optional Tauri shells — not the Azure deploy
+├── backend/                       # The API — its own Docker image
+│   ├── navport/                   # The Python package
+│   │   ├── __init__.py            # App factory: API index, /api/health, CORS
+│   │   ├── config.py              # Settings, production-safe defaults
+│   │   ├── security.py            # Headers, rate limiting, gzip, error handling
+│   │   ├── validation.py          # Input validation — bad input is 4xx, not 500
+│   │   ├── cache.py               # TTL cache for upstream weather calls
+│   │   ├── telemetry.py           # Live console device/traffic reporting (dev)
+│   │   ├── models/pirep.py        # PIREP dataclass + raw-text parsing
+│   │   ├── services/              # flight_rules · pirep · nlp · weather · airports
+│   │   ├── routes/                # /api/* Flask blueprints
+│   │   └── data/airports.json.gz  # 34,000 airports, bundled
+│   ├── tests/
+│   │   ├── api_test.py            # End-to-end against a running API
+│   │   └── test_risk.py           # Risk scoring logic, no server needed
+│   ├── wsgi.py                    # WSGI entry: gunicorn imports it, or run it for the dev server
+│   ├── gunicorn.conf.py           # Production server settings
+│   ├── requirements.txt
+│   └── Dockerfile                 # Two-stage, non-root, gunicorn on :8000
+├── frontend/                      # The dashboard
+│   ├── public/                    # Everything that gets served, as-is (no build step)
+│   │   ├── index.html
+│   │   ├── staticwebapp.config.json  # Security headers, MIME types, cache rules
+│   │   ├── manifest.webmanifest   # PWA install metadata
+│   │   ├── sw.js                  # Service worker — shell cached, weather never
+│   │   ├── offline.html
+│   │   ├── css/                   # tokens · layout · components · dashboard · platform · print · board
+│   │   ├── js/
+│   │   │   ├── main.js            # ES module entry point
+│   │   │   ├── api-config.js      # Where the API is — rewritten per deployment
+│   │   │   ├── config.js          # Resolves the API base URL
+│   │   │   ├── native.js          # Native-shell detection, runs before first paint
+│   │   │   ├── core/              # api · state · dom · format · idents
+│   │   │   ├── ui/                # shell · theme · recent · toast · offline · board
+│   │   │   └── views/             # overview · risk · ribbon · map · charts · notams · timeline · alternates · pireps
+│   │   ├── vendor/                # Leaflet, Chart.js, IBM Plex — served from our own origin
+│   │   └── assets/                # icon.png + generated icon set
+│   ├── tools/site.py              # Dev server · nginx config · per-deployment API address
+│   ├── tests/site_test.py         # End-to-end against any served copy, including production
+│   ├── Dockerfile                 # nginx, non-root — for docker compose only
+│   └── nginx.conf
+├── desktop/                       # Optional Tauri shells (Windows, macOS, Linux, Android, iOS)
 ├── scripts/
-│   ├── vendor_assets.py       # Fetch + hash-verify frontend/vendor/
-│   ├── ui_matrix.py           # Render at 7 form factors, audit the layout
-│   ├── build_icons.py         # Generate every icon size from icon.png
-│   ├── build_airport_db.py    # Rebuild the bundled airport database
-│   └── check_tauri_config.py  # Validate tauri.conf.json against the v2 schema
-├── tests/
-│   ├── smoke_test.py          # End-to-end against a running server
-│   └── test_risk.py           # Risk scoring logic
-├── .github/workflows/         # ci · deploy (ghcr + optional Azure) · apps
-└── docs/
-    ├── ARCHITECTURE.md
-    ├── DEPLOYMENT.md
-    ├── SECURITY.md
-    └── screenshots/           # Output of scripts/ui_matrix.py
+│   ├── dev.py                     # Runs the dashboard and the API together (run.bat uses it)
+│   ├── vendor_assets.py           # Fetch + hash-verify frontend/public/vendor/
+│   ├── ui_matrix.py               # Render at 7 form factors, audit the layout
+│   ├── build_icons.py             # Generate every icon size from icon.png
+│   ├── build_airport_db.py        # Rebuild the bundled airport database
+│   └── check_tauri_config.py      # Validate tauri.conf.json against the v2 schema
+├── docker-compose.yml             # Both containers, production settings
+├── run.bat / run.command          # One-click launchers
+├── pyproject.toml                 # Ruff config
+├── .github/workflows/             # ci · backend (Docker Hub → Container Apps) · frontend (Static Web Apps) · apps
+└── docs/                          # ARCHITECTURE · DEPLOYMENT · SECURITY · screenshots
 ```
 
 ## API Endpoints
 
+A REST-style JSON API. Every response is JSON, including errors
+(`{"error": "..."}`), and the status codes carry meaning: `400` bad input,
+`404` unknown resource, `405` wrong method, `413` body too large, `429` rate
+limited (with `Retry-After`), `503` upstream weather unavailable.
+
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/` | Serves the dashboard |
+| `GET` | `/` or `/api` | What this service is, and where its endpoints are |
 | `GET` | `/api/health` | Liveness: `"status":"ok"` if the airport DB loaded. Docker and Azure probe this |
 | `POST` | `/api/enhanced-flight-plan` | Full route analysis: weather timeline, NOTAMs, risk assessment, briefing |
 | `POST` | `/api/process-natural-language` | Extracts departure/destination/waypoints/speed from free text |
@@ -179,17 +207,21 @@ NavPort/
 
 ## Technology Stack
 
-**Backend:** Flask, `requests`, `concurrent.futures` for parallel API calls,
-regex-based NLP and a pure-Python flight-rules engine (no external ML/LLM
-dependency, no extra packages beyond `requirements.txt`).
+**API:** Flask, `requests`, `concurrent.futures` for parallel upstream calls,
+regex-based NLP and a pure-Python flight-rules engine — no external ML/LLM
+dependency, nothing beyond `backend/requirements.txt`. Served by gunicorn in a
+Docker image.
 
-**Frontend:** Native ES modules — no bundler, no build step, no framework
+**Dashboard:** Native ES modules — no bundler, no build step, no framework
 runtime. Chart.js for the wind/visibility plots, Leaflet for the route map,
 IBM Plex Sans + IBM Plex Mono for type. All three are committed under
-`frontend/vendor/` and served from the app's own origin rather than a CDN, so
-a bad minute at jsdelivr cannot leave the page with no map, and the packaged
-apps open without a network. Light and dark themes driven entirely by CSS
-custom properties.
+`frontend/public/vendor/` and served from the dashboard's own origin rather
+than a CDN, so a bad minute at a CDN cannot leave the page with no map, and the
+packaged apps open without a network. Light and dark themes driven entirely by
+CSS custom properties.
+
+**Hosting:** Azure Container Apps (API), Azure Static Web Apps (dashboard),
+Docker Hub (the API's image), GitHub Actions (CI/CD).
 
 **Data:** [Aviation Weather Center](https://aviationweather.gov) public API for
 weather; [OurAirports](https://ourairports.com/data/) (public domain) for the
@@ -201,7 +233,7 @@ bundled worldwide airport database.
   data from aviationweather.gov, up to 15 days historical and a few hours of
   forecast, depending on product.
 - **NOTAMs**: currently deterministic demo data (see
-  [docs/ARCHITECTURE.md §4](docs/ARCHITECTURE.md#4-notams-are-simulated)) —
+  [docs/ARCHITECTURE.md §6](docs/ARCHITECTURE.md#6-notams-are-simulated)) —
   real NOTAM feeds require an authenticated/paid API (FAA NOTAM Search, SWIM,
   or a commercial provider). Every generated NOTAM is labeled
   `"source": "Demo Data (Time-Based)"` in API responses so this is never
@@ -212,19 +244,19 @@ bundled worldwide airport database.
 
 ## Configuration
 
-Environment variables, all optional and read in `backend/config.py`. Every
-default is the safe one: with nothing set, the app runs as though it were in
-production, so forgetting a variable can never be what exposes the debugger.
-`run.bat` and `run.command` are the only things that opt into development
-mode, and they do it explicitly.
+The API reads these environment variables, all optional, in
+`backend/navport/config.py`. Every default is the safe one: with nothing set,
+the API runs as though it were in production, so forgetting a variable can
+never be what exposes the debugger. `run.bat` and `run.command` are the only
+things that opt into development mode, and they do it explicitly.
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `NAVPORT_ENV` | `production` | `development` relaxes the defaults below |
 | `NAVPORT_HOST` | `0.0.0.0` in production, `127.0.0.1` otherwise | Bind address |
-| `PORT` / `NAVPORT_PORT` | `5000` | Port. `PORT` wins — it is what Azure and most hosts set |
+| `PORT` / `NAVPORT_PORT` | `8000` | Port. `PORT` wins — it is what Azure and most hosts set |
 | `NAVPORT_DEBUG` | `false` | Flask debug/reload. Ignored unless `NAVPORT_ENV` is development, because the debugger is remote code execution |
-| `NAVPORT_CORS_ORIGINS` | native-shell origins | Comma-separated allowlist, or `*` in development |
+| `NAVPORT_CORS_ORIGINS` | — | Comma-separated origins allowed to call the API. **Must include the dashboard's address** (the Static Web App URL in production). The native-shell origins are always allowed; everything is allowed in development |
 | `NAVPORT_RATE_LIMIT` | `60` | Requests per window, per IP |
 | `NAVPORT_BRIEFING_RATE_LIMIT` | `10` | Briefings per window, per IP — this is the endpoint that fans out to the upstream API |
 | `NAVPORT_RATE_WINDOW` | `60` | Window length in seconds |
@@ -235,36 +267,42 @@ mode, and they do it explicitly.
 | `NAVPORT_MAX_BODY_BYTES` | `65536` | Request body limit |
 
 Gunicorn has its own knobs (`WEB_CONCURRENCY`, `NAVPORT_THREADS`,
-`NAVPORT_TIMEOUT`) documented in `gunicorn.conf.py`.
+`NAVPORT_TIMEOUT`) documented in `backend/gunicorn.conf.py`.
 
-## After it is on Azure
+The dashboard has one setting: the API's address, written into
+`frontend/public/js/api-config.js` at deploy time by
+`python frontend/tools/site.py configure --api-base <url>`. Locally it
+defaults to port 8000 of whichever machine served the page.
 
-The container **is** the website. Opening the Container Apps HTTPS URL is
-enough for a deployment demo.
-
-Optional, not part of hosting:
+## Optional extras
 
 | Extra | How |
 |---|---|
-| **Home-screen icon** | On the phone, open the Azure URL → Add to Home Screen / Install. That is a PWA; weather still comes from Azure |
-| **Windows / Mac / Android installers** | [desktop/README.md](desktop/README.md). Thin Tauri windows that call the same API. Bake `NAVPORT_API_BASE` to the Azure hostname. Skip App Store / Play |
+| **Home-screen icon** | On a phone, open the dashboard → Add to Home Screen / Install. That is a PWA; weather still comes from the API |
+| **Windows / Mac / Android installers** | [desktop/README.md](desktop/README.md). Thin Tauri windows around the same dashboard, calling the same API. Skip App Store / Play |
 
 ## Checking It Still Works
 
 ```bash
-python tests/test_risk.py                  # risk scoring, no server needed
-python tests/smoke_test.py                 # every endpoint, against a running server
-python scripts/ui_matrix.py                # render at 7 form factors and audit the layout
-python scripts/vendor_assets.py --check    # confirm frontend/vendor/ matches upstream
-ruff check backend/ scripts/ tests/ run.py
+python backend/tests/test_risk.py                         # risk scoring, no server needed
+python backend/tests/api_test.py http://127.0.0.1:8000    # every endpoint, CORS, headers, rate limits
+python frontend/tests/site_test.py http://127.0.0.1:8080  # the dashboard: headers, CSP, PWA files, compression
+python scripts/ui_matrix.py                               # render at 7 form factors and audit the layout
+python scripts/vendor_assets.py --check                   # confirm frontend/public/vendor/ matches upstream
+ruff check backend/ frontend/tools/ frontend/tests/ scripts/
 ```
+
+`site_test.py` runs against any address the dashboard is served from — the
+local dev server, the nginx container, or the live Static Web App — and the
+frontend workflow runs it against production after every deploy.
 
 `ui_matrix.py` drives a headless Chrome or Edge, runs a real briefing at each
 size, writes a screenshot to `docs/screenshots/`, and fails on horizontal
 overflow, tap targets whose reachable area is under 44px, or form fields small
 enough to make iOS Safari zoom on focus. `.github/workflows/ci.yml` runs the
-rest on every push, plus a Docker build that starts the image and asserts it is
-healthy and not running as root.
+rest on every push, plus a Docker job that builds both images, starts them with
+`docker-compose.yml`, asserts neither runs as root, and runs both test suites
+against the containers.
 
 The tap-target check hit-tests with `elementFromPoint` rather than measuring
 bounding boxes, because several controls are deliberately small on screen and

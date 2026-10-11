@@ -1,4 +1,4 @@
-"""Download Leaflet, Chart.js and the IBM Plex fonts into frontend/vendor/.
+"""Download Leaflet, Chart.js and the IBM Plex fonts into frontend/public/vendor/.
 
 NavPort used to pull these from unpkg, jsdelivr and Google Fonts at runtime.
 That is fine for a page you visit and wrong for this app, for three reasons:
@@ -34,11 +34,11 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-VENDOR = ROOT / "frontend" / "vendor"
+VENDOR = ROOT / "frontend" / "public" / "vendor"
 
 UA = "NavPort-vendor-script (+https://github.com/navport)"
 
-# path under frontend/vendor  ->  (url, sha384 or None)
+# path under frontend/public/vendor  ->  (url, sha384 or None)
 #
 # The two library hashes are the ones that were pinned as SRI in index.html,
 # so this is verifying the exact bytes the browser was already accepting.

@@ -1,4 +1,4 @@
-"""Rebuild backend/data/airports.json.gz from the OurAirports dataset.
+"""Rebuild backend/navport/data/airports.json.gz from the OurAirports dataset.
 
 Run this to refresh the bundled airport database:
 
@@ -26,7 +26,7 @@ import urllib.request
 from pathlib import Path
 
 SOURCE_URL = "https://davidmegginson.github.io/ourairports-data/airports.csv"
-OUTPUT = Path(__file__).resolve().parent.parent / "backend" / "data" / "airports.json.gz"
+OUTPUT = Path(__file__).resolve().parent.parent / "backend" / "navport" / "data" / "airports.json.gz"
 
 # OurAirports `type` -> the single-letter code the app stores.
 KIND_CODES = {

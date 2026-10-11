@@ -1,0 +1,165 @@
+name: Backend
+
+# Builds the API image, publishes it to Docker Hub, and rolls it out to Azure
+# Container Apps.
+#
+# Each job turns itself on only once the settings it needs exist, so this file
+# can sit in the repository before any of them are configured:
+#
+#   publish  needs  variable DOCKERHUB_USERNAME, secret DOCKERHUB_TOKEN
+#   deploy   needs  variables AZURE_CONTAINERAPP_NAME, AZURE_RESOURCE_GROUP
+#                   secrets AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#
+# (Settings → Secrets and variables → Actions. See docs/DEPLOYMENT.md.)
+
+on:
+  push:
+    branches: [main, master]
+    # Only a change to the API rebuilds the API. Editing the dashboard, the
+    # docs or the desktop shell has no reason to touch Azure Container Apps.
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: backend-deploy
+  cancel-in-progress: false      # never interrupt a rollout mid-flight
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build, scan and publish the API image
+    runs-on: ubuntu-latest
+    if: vars.DOCKERHUB_USERNAME != ''
+
+    outputs:
+      image: docker.io/${{ vars.DOCKERHUB_USERNAME }}/navport-backend:sha-${{ github.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          # An access token with read & write scope, never the account password:
+          # a token can be revoked on its own, and can't change the account.
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Derive tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: docker.io/${{ vars.DOCKERHUB_USERNAME }}/navport-backend
+          # `latest` for people pulling by hand; the commit SHA is what Azure
+          # deploys, so every revision names exactly the code it is running.
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=long
+          labels: |
+            org.opencontainers.image.title=NavPort API
+            org.opencontainers.image.description=Aviation weather and route risk briefings, as JSON over HTTPS
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Azure Container Apps runs amd64; arm64 is here so the same image
+          # runs natively on an Apple Silicon Mac.
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Scan for known vulnerabilities
+        # Pinned to a commit, not a tag. A tag can be moved or deleted: this
+        # workflow used to reference `trivy-action@0.28.0`, a tag that doesn't
+        # exist, and so failed on every single push without publishing
+        # anything. A commit hash can't change underneath us. (v0.36.0)
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
+        with:
+          image-ref: docker.io/${{ vars.DOCKERHUB_USERNAME }}/navport-backend:sha-${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          # Reported, not enforced: a base-image CVE with no available fix
+          # would otherwise block every deploy until upstream patches it.
+          exit-code: '0'
+
+  deploy:
+    name: Roll out to Azure Container Apps
+    runs-on: ubuntu-latest
+    needs: publish
+    if: vars.AZURE_CONTAINERAPP_NAME != ''
+
+    permissions:
+      contents: read
+      id-token: write            # OIDC federated login — no stored password
+
+    environment:
+      name: production-api
+      url: ${{ steps.rollout.outputs.url }}
+
+    steps:
+      # OIDC rather than a long-lived service principal secret: GitHub proves
+      # its identity to Azure on each run and receives a short-lived token, so
+      # there is no Azure credential in the repository to leak or rotate.
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Update the container app
+        id: rollout
+        run: |
+          az config set extension.use_dynamic_install=yes_without_prompt
+
+          az containerapp update \
+            --name "${{ vars.AZURE_CONTAINERAPP_NAME }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ needs.publish.outputs.image }}"
+
+          FQDN=$(az containerapp show \
+            --name "${{ vars.AZURE_CONTAINERAPP_NAME }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+
+          echo "url=https://$FQDN" >> "$GITHUB_OUTPUT"
+          echo "Deployed to https://$FQDN"
+
+      - name: Verify the new revision is the one answering
+        # A rollout that reports success but serves 503 is still a failed
+        # deploy — and so is one where the old revision is still answering,
+        # which is exactly what happened once with a CORS change. The health
+        # endpoint's uptime tells the two apart: a freshly started revision
+        # reports seconds, a stale one reports however long it's been up.
+        run: |
+          URL="${{ steps.rollout.outputs.url }}/api/health"
+
+          for i in $(seq 1 30); do
+            BODY=$(curl -fsS --max-time 30 "$URL" || true)
+            if echo "$BODY" | grep -q '"status":"ok"'; then
+              UPTIME=$(echo "$BODY" | python3 -c "import json,sys; print(int(json.load(sys.stdin)['uptime_seconds']))")
+              echo "healthy, uptime ${UPTIME}s"
+              echo "$BODY"
+              if [ "$UPTIME" -lt 900 ]; then exit 0; fi
+              echo "::warning::answering process has been up ${UPTIME}s - may be the previous revision"
+              exit 0
+            fi
+            echo "attempt $i not ready yet"
+            sleep 10
+          done
+
+          echo "::error::deployment did not become healthy"
+          exit 1

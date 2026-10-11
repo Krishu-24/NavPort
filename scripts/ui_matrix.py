@@ -13,7 +13,7 @@ that actually break when a layout is ported to a phone:
 
 Run the server first, then:
 
-    python scripts/ui_matrix.py [--base http://127.0.0.1:5000] [--keep-open]
+    python scripts/ui_matrix.py [--base http://127.0.0.1:8080] [--keep-open]
 
 Screenshots land in docs/screenshots/. There is no websocket library in
 requirements.txt and this is the only thing that would need one, so the
@@ -521,7 +521,7 @@ def capture(browser: Browser, path: Path, max_height: int = 6000) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base", default=os.environ.get("NAVPORT_BASE", "http://127.0.0.1:5000"))
+    parser.add_argument("--base", default=os.environ.get("NAVPORT_BASE", "http://127.0.0.1:8080"))
     parser.add_argument("--only", help="run a single device by name")
     parser.add_argument("--keep-open", action="store_true", help="leave the browser running")
     args = parser.parse_args()

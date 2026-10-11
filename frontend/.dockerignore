@@ -1,0 +1,8 @@
+# The build context is frontend/. The image needs public/ (the site),
+# nginx.conf, and tools/site.py for the stage that generates the header rules.
+
+tests/
+__pycache__/
+*.py[cod]
+Dockerfile
+.dockerignore

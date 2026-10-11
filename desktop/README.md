@@ -124,7 +124,7 @@ brew install cocoapods
 ```bash
 cd desktop
 npm install
-npm run icons       # generates every icon format from frontend/assets/icon.png
+npm run icons       # generates every icon format from frontend/public/assets/icon.png
 ```
 
 Verify the toolchain sees everything it needs:
@@ -137,8 +137,9 @@ npm run info
 
 ## Development
 
-`tauri dev` points the webview at the **running Flask server**, so you get the
-live backend and hot reload of the frontend:
+`tauri dev` points the webview at the **dashboard's development server**
+(port 8080), which `run.bat` starts alongside the API (port 8000). You get the
+live API and an immediate reload of any dashboard edit:
 
 ```bash
 # terminal 1 — from the repo root
@@ -148,17 +149,18 @@ run.bat
 cd desktop && npm run dev
 ```
 
-Because the page is served from `localhost:5000` in this mode, relative
-`/api/...` paths resolve normally and nothing needs configuring.
+In this mode the page comes from `localhost:8080` and calls the API on
+`localhost:8000`, exactly as it does in a browser during development
+(`frontend/public/js/api-config.js` supplies that address). Nothing needs
+configuring.
 
 ---
 
 ## Release builds
 
-A release build **embeds `frontend/` into the binary**. The page is then served
-from `tauri://localhost`, where a relative `/api/...` points at the bundle
-itself and there is no server behind it. So the build has to be told where the
-API lives:
+A release build **embeds `frontend/public/` into the binary**. The page is then
+served from `tauri://localhost`, where there is no API at all. So the build has
+to be told where the API lives:
 
 ```bash
 # Windows (PowerShell)
@@ -170,12 +172,13 @@ NAVPORT_API_BASE=https://your-app.azurecontainerapps.io npm run build
 
 That value is read by `option_env!` in `src-tauri/src/lib.rs` and baked in at
 compile time, then injected as `window.NAVPORT_API_BASE` before any page
-script runs. `frontend/js/config.js` picks it up as its highest-priority
-source. Compile-time rather than a config file next to the executable, so a
+script runs. `frontend/public/js/config.js` picks it up as its
+highest-priority source, and `api-config.js` leaves an injected value alone. Compile-time rather than a config file next to the executable, so a
 shipped app can't be repointed at someone else's backend.
 
-Forget to set it and the app falls back to same-origin, which in a bundle
-means no API at all — the UI loads and every request fails.
+Forget to set it and the app falls back to the local-development default
+(port 8000 on the same host), which in a bundle means no API at all — the UI
+loads and every request fails.
 
 ### Output locations
 
@@ -230,8 +233,8 @@ Worth trying first. Deploy the container, open the URL, and:
 | **Windows / macOS / Linux** (Chrome, Edge) | Install icon in the address bar, or ⋮ → *Install NavPort* |
 
 This gives a real standalone window with no browser chrome, its own icon and
-its own entry in the task switcher. `frontend/manifest.webmanifest` and
-`frontend/sw.js` are what make it work.
+its own entry in the task switcher. `frontend/public/manifest.webmanifest` and
+`frontend/public/sw.js` are what make it work.
 
 **Weather is never cached**, deliberately — see the comment at the top of
 `sw.js`. A saved METAR is indistinguishable from a current one, and ceilings
@@ -240,7 +243,7 @@ the app shell is cached, so the app opens offline and tells you it has no data
 rather than showing you something stale.
 
 The shell is genuinely self-contained: Leaflet, Chart.js and the fonts are
-committed under `frontend/vendor/` and bundled into the native builds, so a
+committed under `frontend/public/vendor/` and bundled into the native builds, so a
 packaged app needs the network only for weather and basemap tiles. That was
 not true when those came from a CDN — and the symptom was subtle, because
 Leaflet failing to load leaves an empty grey panel rather than an error.
@@ -249,8 +252,8 @@ Leaflet failing to load leaves an empty grey panel rather than an error.
 
 ## Troubleshooting
 
-**`tauri dev` shows a blank window.** The Flask server isn't running. Start
-`run.bat` first — `devUrl` points at `http://localhost:5000`.
+**`tauri dev` shows a blank window.** The dashboard's development server isn't
+running. Start `run.bat` first — `devUrl` points at `http://localhost:8080`.
 
 **Release build loads but every request fails.** `NAVPORT_API_BASE` wasn't set
 at build time. See [Release builds](#release-builds).
