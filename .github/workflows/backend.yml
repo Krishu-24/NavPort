@@ -145,7 +145,7 @@ jobs:
         # endpoint's uptime tells the two apart: a freshly started revision
         # reports seconds, a stale one reports however long it's been up.
         run: |
-          URL="${{ steps.rollout.outputs.url }}/api/health"
+          URL="${{ steps.rollout.outputs.url }}/api/v1/health"
 
           for i in $(seq 1 30); do
             BODY=$(curl -fsS --max-time 30 "$URL" || true)

@@ -1,23 +1,22 @@
 /**
  * Where the API lives.
  *
- * On the web the frontend is served by the same Flask app that answers
- * `/api/*`, so a relative path is correct and needs no configuration. The
- * packaged apps are the reason this file exists: inside a Tauri or Capacitor
- * webview the page is loaded from `tauri://localhost` or the app bundle, so a
- * relative `/api/...` resolves to the bundle itself and there is no server
- * there to answer it. Those builds have to be told the deployed origin.
+ * The dashboard and the API are separate services on separate origins, so a
+ * relative `/api/...` would ask the static site — or, inside a Tauri or
+ * Capacitor webview, the app bundle — for something only the API has. Every
+ * build has to be told the API's origin.
  *
  * Resolution order, first match wins:
  *
- *   1. `window.NAVPORT_API_BASE`, injected before the app boots. This is the
- *      hook the native shells use.
+ *   1. `window.NAVPORT_API_BASE`, set before the app boots by api-config.js
+ *      (written per deployment) or by a native shell.
  *   2. `?api=` in the URL, for pointing a dev build at a staging deployment
  *      without rebuilding. Ignored unless the page is itself on localhost, so
  *      a link like `https://navport.example/?api=https://evil.test` cannot
  *      redirect a real user's briefings to somebody else's server.
  *   3. `navport:apiBase` in localStorage, so a choice made once sticks.
- *   4. Same origin — the web default.
+ *   4. Same origin — a last resort, for a page served behind a proxy that
+ *      also routes /api to the API.
  */
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '']);

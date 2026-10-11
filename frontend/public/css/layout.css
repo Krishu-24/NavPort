@@ -88,6 +88,19 @@
     color: var(--ink-3);
 }
 
+.rail__api {
+    margin-left: auto;
+    color: var(--ink-3);
+    text-decoration: underline;
+    text-decoration-color: var(--line);
+    text-underline-offset: 2px;
+}
+
+.rail__api:hover {
+    color: var(--accent);
+    text-decoration-color: currentColor;
+}
+
 .scrim {
     position: fixed;
     inset: 0;

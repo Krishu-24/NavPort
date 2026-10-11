@@ -40,7 +40,7 @@ def briefing(destination: str = "KBOS"):
         "departure_time": (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"),
     }).encode()
 
-    req = urllib.request.Request(BASE + "/api/enhanced-flight-plan", data=body, method="POST")
+    req = urllib.request.Request(BASE + "/api/v1/briefings", data=body, method="POST")
     req.add_header("Content-Type", "application/json")
     req.add_header("Accept-Encoding", "gzip")
 

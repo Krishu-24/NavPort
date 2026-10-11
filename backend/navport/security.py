@@ -13,7 +13,7 @@ import time
 from collections import OrderedDict, deque
 from threading import Lock
 
-from flask import jsonify, request
+from flask import request
 
 from navport.config import (
     BRIEFING_RATE_LIMIT,
@@ -24,6 +24,8 @@ from navport.config import (
     RATE_LIMIT_WINDOW_SECONDS,
     TRUST_PROXY_HEADERS,
 )
+from navport.problems import MEDIA_TYPE as PROBLEM_MEDIA_TYPE
+from navport.problems import problem
 from navport.validation import BadRequest
 
 log = logging.getLogger(__name__)
@@ -33,6 +35,7 @@ log = logging.getLogger(__name__)
 # a full briefing is tens of kilobytes, and compresses about 6:1.
 COMPRESSIBLE_TYPES = frozenset({
     'application/json',
+    PROBLEM_MEDIA_TYPE,
     'text/plain',
 })
 
@@ -131,21 +134,28 @@ class SlidingWindowLimiter:
 
 limiter = SlidingWindowLimiter()
 
+# Limits are keyed on endpoint *names* — the view functions in routes/ — not on
+# URL paths. Each endpoint answers at its /api/v1 address and at a deprecated
+# /api alias (routes/legacy_routes.py); keying on the name means both share one
+# budget, so a client can't double its allowance by alternating between them.
+#
 # Only the briefing gets the tighter budget. It is the one endpoint that fans a
 # single request out into seven upstream calls, so it is the one that can get
-# the deployment throttled by aviationweather.gov.
-#
-# `/api/alternates` and `/api/pirep-reports` deliberately are *not* here: they
-# cost one upstream call each, and they are driven by the user clicking around
-# the dashboard. Opening pilot reports for a dozen stations along a route is
-# ordinary use, and a 10-per-minute cap would break it.
-EXPENSIVE_ENDPOINTS = {
-    '/api/enhanced-flight-plan',
-}
+# the deployment throttled by aviationweather.gov. Alternates and pilot reports
+# deliberately are *not* here: they cost one upstream call each, and they are
+# driven by the user clicking around the dashboard — opening pilot reports for
+# a dozen stations along a route is ordinary use, and a 10-per-minute cap
+# would break it.
+EXPENSIVE_ENDPOINTS = {'create_briefing'}
+
+# Probes and the API's own description cost nothing and must always answer.
+UNLIMITED_ENDPOINTS = {'health', 'openapi', 'index'}
 
 
-def _is_expensive(path: str) -> bool:
-    return any(path == route or path.startswith(route + '/') for route in EXPENSIVE_ENDPOINTS)
+def _endpoint_name() -> str:
+    """'create_briefing' for both v1.create_briefing and legacy.create_briefing;
+    '' when nothing matched (a 404), which still counts against the budget."""
+    return (request.endpoint or '').rsplit('.', 1)[-1]
 
 
 def install_security(app) -> None:
@@ -154,23 +164,35 @@ def install_security(app) -> None:
     # ---------------------------------------------------------------- limits
     @app.before_request
     def _rate_limit():
-        if not request.path.startswith('/api/') or request.path == '/api/health':
+        if not request.path.startswith('/api/'):
             return None
 
+        # A CORS preflight is the browser asking permission, not a request for
+        # anything. The dashboard is cross-origin, so every briefing it sends
+        # is preceded by one — counting them charged each briefing twice
+        # against its budget.
+        if request.method == 'OPTIONS':
+            return None
+
+        name = _endpoint_name()
+        if name in UNLIMITED_ENDPOINTS:
+            return None
+
+        expensive = name in EXPENSIVE_ENDPOINTS
+        limit = BRIEFING_RATE_LIMIT if expensive else RATE_LIMIT_REQUESTS
+        scope = 'briefing' if expensive else 'api'
         key = client_ip()
-        limit = BRIEFING_RATE_LIMIT if _is_expensive(request.path) else RATE_LIMIT_REQUESTS
-        scope = 'briefing' if _is_expensive(request.path) else 'api'
 
         allowed, retry_after = limiter.check(f'{scope}:{key}', limit, RATE_LIMIT_WINDOW_SECONDS)
         if allowed:
             return None
 
         log.warning("Rate limit hit: %s on %s", key, request.path)
-        response = jsonify({
-            'error': 'Too many requests — slow down and try again shortly.',
-            'retry_after_seconds': retry_after,
-        })
-        response.status_code = 429
+        response = problem(
+            429,
+            'Too many requests — slow down and try again shortly.',
+            retry_after_seconds=retry_after,
+        )
         response.headers['Retry-After'] = str(retry_after)
         return response
 
@@ -235,21 +257,27 @@ def install_security(app) -> None:
         return response
 
     # ---------------------------------------------------------------- errors
+    # Every error is an RFC 9457 Problem Details response (see problems.py).
     @app.errorhandler(BadRequest)
     def _bad_request(exc: BadRequest):
-        return jsonify({'error': exc.message}), exc.status
+        return problem(exc.status, exc.message)
 
     @app.errorhandler(404)
     def _not_found(_):
-        return jsonify({'error': 'Not found'}), 404
+        return problem(404, 'No such resource. GET /api/v1 lists the endpoints.')
 
     @app.errorhandler(405)
-    def _method_not_allowed(_):
-        return jsonify({'error': 'Method not allowed'}), 405
+    def _method_not_allowed(exc):
+        response = problem(405, f'{request.method} is not supported here.')
+        # RFC 9110: a 405 must say which methods *are* allowed.
+        allowed = getattr(exc, 'valid_methods', None)
+        if allowed:
+            response.headers['Allow'] = ', '.join(sorted(allowed))
+        return response
 
     @app.errorhandler(413)
     def _too_large(_):
-        return jsonify({'error': 'Request body too large'}), 413
+        return problem(413, 'Request body too large.')
 
     @app.errorhandler(Exception)
     def _unhandled(exc):
@@ -257,4 +285,4 @@ def install_security(app) -> None:
         # hostname or a fragment of the upstream URL. Log it in full for us;
         # return an opaque message to the caller.
         log.exception("Unhandled error on %s %s", request.method, request.path)
-        return jsonify({'error': 'Internal server error'}), 500
+        return problem(500, 'Internal server error.')

@@ -70,7 +70,7 @@ def csp_directive(csp: str, name: str) -> list[str]:
 # --------------------------------------------------------------------------
 section("The page")
 
-status, headers, index = call("/")
+status, index_headers, index = call("/")
 check("GET  / -> 200", status == 200, f"got {status}")
 check("  is the dashboard", "<!DOCTYPE html>" in str(index)[:200] and "NavPort" in str(index))
 check("  viewport allows drawing into the safe area", "viewport-fit=cover" in str(index))
@@ -81,6 +81,27 @@ config_at = str(index).find("js/api-config.js")
 main_at = str(index).find("js/main.js")
 check("  loads api-config.js before main.js", 0 <= config_at < main_at,
       f"api-config at {config_at}, main at {main_at}")
+
+# --------------------------------------------------------------------------
+section("API reference page")
+
+# /docs/ renders the API's OpenAPI description with Swagger UI. The
+# description itself comes from the API at run time; this checks the page that
+# hosts it.
+status, docs_headers, docs = call("/docs/")
+check("GET  /docs/ -> 200", status == 200, f"got {status}")
+check("  is the API reference", "API reference" in str(docs) and "swagger-ui-bundle.js" in str(docs))
+
+refs = re.findall(r'(?:src|href)="(/[^"#]+)"', str(docs))
+missing = [ref for ref in refs if call(ref)[0] != 200]
+check(f"  all {len(refs)} files it loads are on this site", bool(refs) and not missing, f"missing: {missing}")
+
+config_at = str(docs).find("/js/api-config.js")
+docs_js_at = str(docs).find("/docs/docs.js")
+check("  learns the API's address before asking it for the description", 0 <= config_at < docs_js_at,
+      f"api-config at {config_at}, docs.js at {docs_js_at}")
+check("  has the dashboard's Content-Security-Policy",
+      header(docs_headers, "Content-Security-Policy") == header(index_headers, "Content-Security-Policy"))
 
 # --------------------------------------------------------------------------
 section("Installable-app plumbing")
@@ -126,7 +147,8 @@ def encoding_of(path: str) -> tuple:
 
 
 for asset in ("/", "/css/dashboard.css", "/js/main.js",
-              "/vendor/leaflet/leaflet.js", "/vendor/chartjs/chart.umd.min.js"):
+              "/vendor/leaflet/leaflet.js", "/vendor/chartjs/chart.umd.min.js",
+              "/vendor/swagger-ui/swagger-ui-bundle.js"):
     encoding, size = encoding_of(asset)
     check(f"{asset} is gzipped", encoding == "gzip", f"{encoding}, {size / 1024:.1f} KB")
 
@@ -187,8 +209,9 @@ for host in sorted(origins):
 # Leaflet, Chart.js and IBM Plex are vendored under /vendor/ so that a CDN
 # outage cannot blank the map, and so the packaged apps open without a
 # network. A reintroduced <script src="https://..."> would undo both quietly.
-external = re.findall(r'(?:src|href)="(https?://[^"]+)"', str(index))
-check("index.html loads no third-party scripts or styles", not external, f"found: {external[:3]}")
+for name, page in (("index.html", index), ("docs/index.html", docs)):
+    external = re.findall(r'(?:src|href)="(https?://[^"]+)"', str(page))
+    check(f"{name} loads no third-party scripts or styles", not external, f"found: {external[:3]}")
 for directive in ("script-src", "font-src"):
     ok = csp_directive(csp, directive) == ["'self'"]
     check(f"CSP names no origin in {directive}", ok, " ".join(csp_directive(csp, directive)))

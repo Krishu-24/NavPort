@@ -1,29 +1,40 @@
-"""Flight plan analysis endpoints: natural-language extraction and the
-comprehensive weather/NOTAM/risk timeline.
+"""Airports, briefings and flight-plan parsing.
+
+    GET  /api/v1/airports?codes=KJFK,EGLL      several airports at once
+    GET  /api/v1/airports/{icao}               one airport
+    GET  /api/v1/airports/{icao}/alternates    diversion options near it
+    POST /api/v1/briefings                     a route briefing for a flight plan
+    POST /api/v1/flight-plans/parse            free text -> a structured flight plan
 
 Validation happens at the top of each handler and raises `BadRequest`, which
-the app-level error handler turns into a 400. Anything that escapes is a bug
-in our code, not bad input, so it becomes an opaque 500 and a logged
-traceback — never an exception string echoed back to the caller.
+the app-level error handler turns into a Problem Details response (see
+problems.py). Anything that escapes is a bug in our code, not bad input, so it
+becomes an opaque 500 and a logged traceback — never an exception string
+echoed back to the caller.
 """
 
 import logging
 
-from flask import Blueprint, jsonify, request
+from flask import jsonify, request, url_for
 
 from navport import validation
+from navport.routes import api_v1
 from navport.services import airports, flight_rules
 from navport.services.weather_service import WeatherProcessor
 
 log = logging.getLogger(__name__)
 
-flight_bp = Blueprint('flight', __name__, url_prefix='/api')
 weather_processor = WeatherProcessor()
 
 
-@flight_bp.route('/airports', methods=['GET'])
-def airport_lookup():
-    """Resolve identifiers to IATA codes and names: ?codes=KJFK,EGLL"""
+@api_v1.route('/airports', methods=['GET'])
+def list_airports():
+    """Resolve identifiers to IATA codes and names: ?codes=KJFK,EGLL
+
+    A filtered view of the airport collection. Unknown identifiers are still
+    returned (with null fields) rather than dropped, so a client can tell
+    "unknown" apart from "not asked for".
+    """
     codes = validation.codes_param(request.args.get('codes', ''))
 
     response = jsonify({'airports': airports.describe_many(codes), 'known': airports.count()})
@@ -32,8 +43,33 @@ def airport_lookup():
     return response
 
 
-@flight_bp.route('/alternates/<icao>', methods=['GET'])
-def alternates(icao):
+@api_v1.route('/airports/<icao>', methods=['GET'])
+def get_airport(icao):
+    """One airport, with links to the resources that belong to it."""
+    code = validation.icao(icao, 'airport code')
+    found = airports.lookup(code)
+    if not found:
+        raise validation.BadRequest(f'No airport with identifier {code} in the database', status=404)
+
+    position = airports.coordinates(code) or {}
+    response = jsonify({
+        **found,
+        'lat': position.get('lat'),
+        'lon': position.get('lon'),
+        # Hypermedia: what a client can do next, so it needn't build these
+        # URLs itself.
+        'links': {
+            'self': url_for('v1.get_airport', icao=code),
+            'alternates': url_for('v1.list_alternates', icao=code),
+            'pilot_reports': url_for('v1.list_pireps', icao=code),
+        },
+    })
+    response.headers['Cache-Control'] = 'public, max-age=86400'
+    return response
+
+
+@api_v1.route('/airports/<icao>/alternates', methods=['GET'])
+def list_alternates(icao):
     """Nearby airports reporting better conditions — diversion planning."""
     station = validation.icao(icao, 'airport code')
     radius = validation.integer(request.args.get('radius'), 'radius', default=200, minimum=25, maximum=400)
@@ -44,14 +80,19 @@ def alternates(icao):
         station, radius_nm=radius, limit=limit, runway_heading=runway_heading)
 
     if 'error' in result:
-        return jsonify(result), 404
+        raise validation.BadRequest(result['error'], status=404)
 
     return jsonify(result)
 
 
-@flight_bp.route('/process-natural-language', methods=['POST'])
-def process_natural_language():
-    """Process natural language flight plan input."""
+@api_v1.route('/flight-plans/parse', methods=['POST'])
+def parse_flight_plan():
+    """Turn free text ("KJFK to KLAX via KORD at 450 knots") into a flight plan.
+
+    A controller resource: parsing is an action, not a thing that gets stored,
+    so it is named as one rather than disguised as a collection. Nothing is
+    created, hence 200 rather than 201.
+    """
     body = validation.json_body(request)
     text = validation.text_field(body, 'text')
 
@@ -64,9 +105,16 @@ def process_natural_language():
     })
 
 
-@flight_bp.route('/enhanced-flight-plan', methods=['POST'])
-def enhanced_flight_plan():
-    """Enhanced flight plan analysis with comprehensive weather timeline, NOTAMs, and NLP."""
+@api_v1.route('/briefings', methods=['POST'])
+def create_briefing():
+    """A route briefing for a flight plan: timeline, NOTAMs, risk, summary.
+
+    POST rather than GET because the input is a structured document (a route
+    with waypoints, a time and a speed) and GET has no body. The briefing is
+    computed and returned, not stored — there is no URL at which it would go
+    on existing — so the response is 200 with the briefing, not 201 Created
+    with a Location.
+    """
     body = validation.json_body(request)
 
     departure = validation.icao(body.get('departure'), 'departure')

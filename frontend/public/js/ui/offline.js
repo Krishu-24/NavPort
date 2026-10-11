@@ -60,7 +60,7 @@ function showOnline() {
  * `navigator.onLine` only reports whether a network interface is up, so it is
  * true on wifi with no route to the internet. A cheap probe against the API
  * is what distinguishes "connected" from "actually reachable" — through
- * apiUrl() rather than a bare '/api/health', since the frontend and the API
+ * apiUrl() rather than a bare '/api/v1/health', since the frontend and the API
  * are not always the same origin (a static-hosted frontend calling a
  * separately deployed backend, for one).
  */
@@ -70,7 +70,7 @@ async function isReachable() {
     try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 4000);
-        const res = await fetch(apiUrl('/api/health'), { cache: 'no-store', signal: controller.signal });
+        const res = await fetch(apiUrl('/api/v1/health'), { cache: 'no-store', signal: controller.signal });
         clearTimeout(timer);
         return res.ok;
     } catch {

@@ -1,9 +1,12 @@
 """End-to-end test of a running NavPort API.
 
-Checks that every endpoint answers, that malformed input is rejected with 4xx
-rather than 500, that cross-origin access is granted to the dashboard and to
-no one else, and that the security headers are present. Exits non-zero if
-anything fails, so CI can gate on it.
+Checks that every endpoint answers, that the API follows its own REST
+conventions (versioned resource URLs, Problem Details errors, an index and an
+OpenAPI description that agree with each other), that the old unversioned
+addresses still work and announce their replacement, that malformed input is
+rejected with 4xx rather than 500, that cross-origin access is granted to the
+dashboard and to no one else, and that the security headers are present.
+Exits non-zero if anything fails, so CI can gate on it.
 
     python backend/tests/api_test.py [base_url]
 
@@ -26,6 +29,8 @@ from datetime import datetime, timedelta, timezone
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000").rstrip("/")
 ALLOWED_ORIGIN = os.environ.get("NAVPORT_TEST_ORIGIN", "http://localhost:8080")
 FOREIGN_ORIGIN = "https://not-navport.example"
+V1 = "/api/v1"
+PROBLEM_TYPE = "application/problem+json"
 
 PASSED: list[str] = []
 FAILED: list[str] = []
@@ -67,6 +72,14 @@ def expect_status(name: str, method: str, path: str, want, body=None) -> tuple:
     return status, headers, payload
 
 
+def is_problem(status: int, headers: dict, payload) -> bool:
+    """An RFC 9457 Problem Details response, consistent with its own status."""
+    return (headers.get("Content-Type", "").startswith(PROBLEM_TYPE)
+            and isinstance(payload, dict)
+            and payload.get("status") == status
+            and all(isinstance(payload.get(k), str) and payload.get(k) for k in ("type", "title", "detail")))
+
+
 def section(title: str) -> None:
     print(f"\n{title}\n{'-' * len(title)}")
 
@@ -80,7 +93,7 @@ def wait_out_rate_limit() -> None:
     like real failures.
     """
     for _ in range(4):
-        status, _, payload = call("GET", "/api/airports?codes=KJFK")
+        status, _, payload = call("GET", f"{V1}/airports?codes=KJFK")
         if status != 429:
             return
         pause = 2
@@ -91,7 +104,7 @@ def wait_out_rate_limit() -> None:
 
 
 wait_out_rate_limit()
-_, _, HEALTH = call("GET", "/api/health")
+_, _, HEALTH = call("GET", f"{V1}/health")
 IS_PRODUCTION = isinstance(HEALTH, dict) and HEALTH.get("environment") == "production"
 
 # --------------------------------------------------------------------------
@@ -99,34 +112,29 @@ IS_PRODUCTION = isinstance(HEALTH, dict) and HEALTH.get("environment") == "produ
 # --------------------------------------------------------------------------
 section("Happy paths")
 
-_, _, payload = expect_status("GET  /", "GET", "/", 200)
-check("  describes the API and lists its endpoints",
-      isinstance(payload, dict) and payload.get("service") == "NavPort API"
-      and "briefing" in payload.get("endpoints", {}),
-      str(payload)[:160])
-
-_, _, payload = expect_status("GET  /api/health", "GET", "/api/health", 200)
+_, _, payload = expect_status(f"GET  {V1}/health", "GET", f"{V1}/health", 200)
 check("  reports status ok", isinstance(payload, dict) and payload.get("status") == "ok",
       str(payload)[:120])
 
-_, _, payload = expect_status("GET  /api/airports", "GET", "/api/airports?codes=KJFK,EGLL", 200)
+_, _, payload = expect_status(f"GET  {V1}/airports?codes=KJFK,EGLL", "GET",
+                              f"{V1}/airports?codes=KJFK,EGLL", 200)
 check("  resolves KJFK to an IATA code",
       isinstance(payload, dict) and payload.get("airports", {}).get("KJFK", {}).get("iata") == "JFK",
       str(payload)[:160])
 
-_, _, payload = expect_status("GET  /api/alternates/KJFK", "GET",
-                              "/api/alternates/KJFK?radius=150&limit=3", 200)
+_, _, payload = expect_status(f"GET  {V1}/airports/KJFK/alternates", "GET",
+                              f"{V1}/airports/KJFK/alternates?radius=150&limit=3", 200)
 check("  returns at least one alternate",
       isinstance(payload, dict) and len(payload.get("alternates", [])) > 0,
       str(payload)[:160])
 
-_, _, payload = expect_status("GET  /api/pirep-reports/KJFK", "GET",
-                              "/api/pirep-reports/KJFK?distance=150&age=6", 200)
+_, _, payload = expect_status(f"GET  {V1}/airports/KJFK/pireps", "GET",
+                              f"{V1}/airports/KJFK/pireps?distance=150&age=6", 200)
 check("  returns a PIREP list", isinstance(payload, dict) and "pireps" in payload,
       str(payload)[:120])
 
-_, _, payload = expect_status("POST /api/process-natural-language", "POST",
-                              "/api/process-natural-language", 200,
+_, _, payload = expect_status(f"POST {V1}/flight-plans/parse", "POST",
+                              f"{V1}/flight-plans/parse", 200,
                               {"text": "fly from KJFK to KLAX via KORD at 450 knots"})
 plan = payload.get("flight_plan", {}) if isinstance(payload, dict) else {}
 check("  extracts departure and destination",
@@ -134,8 +142,7 @@ check("  extracts departure and destination",
       str(plan)[:160])
 
 departure_time = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M")
-_, _, payload = expect_status("POST /api/enhanced-flight-plan", "POST",
-                              "/api/enhanced-flight-plan", 200,
+_, _, payload = expect_status(f"POST {V1}/briefings", "POST", f"{V1}/briefings", 200,
                               {"departure": "KJFK", "destination": "KBOS",
                                "waypoints": [], "cruise_speed": 450,
                                "departure_time": departure_time})
@@ -180,8 +187,99 @@ def encoding_of(path: str) -> tuple:
 
 
 batch = ",".join(["KJFK", "KLAX", "KORD", "KDEN", "KSEA", "KSFO", "KBOS", "KATL", "KMIA", "KDFW", "EGLL", "LFPG"])
-encoding, size = encoding_of(f"/api/airports?codes={batch}")
+encoding, size = encoding_of(f"{V1}/airports?codes={batch}")
 check("  a large JSON response is gzipped", encoding == "gzip", f"{encoding}, {size / 1024:.1f} KB")
+
+# --------------------------------------------------------------------------
+# REST conventions
+# --------------------------------------------------------------------------
+section("REST design")
+
+# The index is the one address a client needs to know; everything else is a
+# link from it.
+_, _, index = expect_status(f"GET  {V1}", "GET", V1, 200)
+links = index.get("links", {}) if isinstance(index, dict) else {}
+check("  links to itself and to every resource",
+      links.get("self") == V1 and {"openapi", "health", "airport", "briefings"} <= set(links),
+      str(links)[:160])
+
+_, _, root = expect_status("GET  / (the service's bare address)", "GET", "/", 200)
+check("  explains the API instead of a 404",
+      isinstance(root, dict) and root.get("service") == "NavPort API", str(root)[:120])
+
+# A single airport is a resource with its own URL, and links to the
+# resources beneath it.
+status, headers, airport = expect_status(f"GET  {V1}/airports/KJFK", "GET", f"{V1}/airports/KJFK", 200)
+airport_links = airport.get("links", {}) if isinstance(airport, dict) else {}
+check("  is the airport, with links to its alternates and PIREPs",
+      isinstance(airport, dict) and airport.get("iata") == "JFK"
+      and airport_links.get("self") == f"{V1}/airports/KJFK"
+      and airport_links.get("alternates") == f"{V1}/airports/KJFK/alternates"
+      and airport_links.get("pilot_reports") == f"{V1}/airports/KJFK/pireps",
+      str(airport_links)[:160])
+check("  is cacheable — an airport doesn't move",
+      "public" in headers.get("Cache-Control", ""), headers.get("Cache-Control", ""))
+
+# Errors: the status code says what kind, the Problem Details body says why.
+status, headers, payload = expect_status(f"GET  {V1}/airports/ZZZZ (unknown)", "GET", f"{V1}/airports/ZZZZ", 404)
+check("  is a Problem Details response (RFC 9457)", is_problem(status, headers, payload),
+      f"{headers.get('Content-Type')}: {str(payload)[:120]}")
+check("  says which resource", isinstance(payload, dict) and payload.get("instance") == f"{V1}/airports/ZZZZ",
+      str(payload)[:120])
+
+status, headers, payload = expect_status(f"GET  {V1}/no-such-thing", "GET", f"{V1}/no-such-thing", 404)
+check("  is a Problem Details response too", is_problem(status, headers, payload), str(payload)[:120])
+
+# RFC 9110: a 405 must say which methods the resource does support.
+status, headers, payload = expect_status(f"DELETE {V1}/briefings", "DELETE", f"{V1}/briefings", 405)
+check("  says what is allowed (Allow: POST)", "POST" in headers.get("Allow", ""),
+      f"Allow: {headers.get('Allow')!r}")
+check("  is a Problem Details response", is_problem(status, headers, payload), str(payload)[:120])
+
+# The machine-readable contract, and that it describes what the index lists.
+status, headers, spec = expect_status(f"GET  {V1}/openapi.json", "GET", f"{V1}/openapi.json", 200)
+spec = spec if isinstance(spec, dict) else {}
+check("  is OpenAPI 3.1", str(spec.get("openapi", "")).startswith("3.1."), str(spec.get("openapi")))
+documented = set(spec.get("paths", {}))
+undocumented = sorted({link.split("?")[0] for link in links.values()} - documented)
+check("  documents every endpoint the index links to", not undocumented, f"missing {undocumented}")
+legacy_paths = [p for p in documented if not p.startswith(V1)]
+check("  marks the unversioned addresses deprecated",
+      legacy_paths and all(op.get("deprecated") for p in legacy_paths for op in spec["paths"][p].values()),
+      f"{len(legacy_paths)} unversioned paths")
+
+# --------------------------------------------------------------------------
+# The original addresses, before /api/v1
+# --------------------------------------------------------------------------
+section("Deprecated aliases")
+
+# Each old address must still work — a client written against it can't be
+# broken the day v1 ships — and must say, in standard headers, that it is
+# retired (Deprecation, RFC 9745), when it may go (Sunset, RFC 8594), and
+# exactly where its replacement is (Link rel="successor-version").
+ALIASES = [
+    ("GET",  "/api/health",                            None, 200, f"{V1}/health"),
+    ("GET",  "/api/airports?codes=KJFK",               None, 200, f"{V1}/airports"),
+    ("GET",  "/api/alternates/KJFK?radius=100&limit=2", None, 200, f"{V1}/airports/KJFK/alternates"),
+    ("GET",  "/api/pirep-reports/KJFK?age=2",          None, 200, f"{V1}/airports/KJFK/pireps"),
+    ("POST", "/api/process-natural-language", {"text": "KJFK to KLAX"}, 200, f"{V1}/flight-plans/parse"),
+    ("POST", "/api/enhanced-flight-plan",     {"departure": "K"},       400, f"{V1}/briefings"),
+]
+for method, path, body, want, successor in ALIASES:
+    status, headers, payload = expect_status(f"{method:4} {path.split('?')[0]}", method, path, want, body)
+    link = headers.get("Link", "")
+    check(f"  announces {successor} as its successor",
+          bool(headers.get("Deprecation")) and bool(headers.get("Sunset"))
+          and f"<{successor}>" in link and 'rel="successor-version"' in link,
+          f"Deprecation={headers.get('Deprecation')!r} Sunset={headers.get('Sunset')!r} Link={link!r}")
+
+check("  an old-style error keeps its 'error' member for old clients",
+      isinstance(payload, dict) and payload.get("error") == payload.get("detail") and payload.get("error"),
+      str(payload)[:160])
+
+_, headers, _ = call("GET", f"{V1}/health")
+check("  /api/v1 itself is not marked deprecated", "Deprecation" not in headers,
+      f"Deprecation={headers.get('Deprecation')!r}")
 
 # --------------------------------------------------------------------------
 # The API is only the API
@@ -201,14 +299,14 @@ section("CORS")
 # The dashboard calls this API from another origin, so the browser only hands
 # it a response if the API names that origin. This is the setting that has to
 # match the dashboard's real address in every deployment.
-_, headers, _ = call("GET", "/api/health", headers={"Origin": ALLOWED_ORIGIN})
+_, headers, _ = call("GET", f"{V1}/health", headers={"Origin": ALLOWED_ORIGIN})
 granted = headers.get("Access-Control-Allow-Origin", "")
 check(f"allows the dashboard's origin ({ALLOWED_ORIGIN})", granted in (ALLOWED_ORIGIN, "*"),
       f"got {granted!r}")
 
 # A briefing is a JSON POST, which the browser sends only after a preflight
 # OPTIONS request has been approved.
-status, headers, _ = call("OPTIONS", "/api/enhanced-flight-plan", headers={
+status, headers, _ = call("OPTIONS", f"{V1}/briefings", headers={
     "Origin": ALLOWED_ORIGIN,
     "Access-Control-Request-Method": "POST",
     "Access-Control-Request-Headers": "content-type",
@@ -220,7 +318,7 @@ check("preflight for a JSON POST is approved",
       f"allow-methods {headers.get('Access-Control-Allow-Methods')!r}")
 
 if IS_PRODUCTION:
-    _, headers, _ = call("GET", "/api/health", headers={"Origin": FOREIGN_ORIGIN})
+    _, headers, _ = call("GET", f"{V1}/health", headers={"Origin": FOREIGN_ORIGIN})
     leaked = headers.get("Access-Control-Allow-Origin")
     check("refuses an origin it doesn't know", not leaked, f"got {leaked!r}")
 else:
@@ -231,35 +329,41 @@ else:
 # --------------------------------------------------------------------------
 section("Input validation (bad input must not 500)")
 
-expect_status("no codes",            "GET",  "/api/airports", 400)
-expect_status("too many codes",      "GET",  "/api/airports?codes=" + ",".join(["KJFK"] * 201), 400)
-expect_status("empty POST body",     "POST", "/api/process-natural-language", 400)
-expect_status("empty text",          "POST", "/api/process-natural-language", 400, {"text": ""})
-expect_status("oversized text",      "POST", "/api/process-natural-language", 400, {"text": "x" * 20_000})
-expect_status("missing route",       "POST", "/api/enhanced-flight-plan", 400, {})
-expect_status("null idents",         "POST", "/api/enhanced-flight-plan", 400,
-              {"departure": None, "destination": None})
-expect_status("non-numeric speed",   "POST", "/api/enhanced-flight-plan", 400,
-              {"departure": "KJFK", "destination": "KLAX", "cruise_speed": "fast"})
-expect_status("malformed ICAO",      "POST", "/api/enhanced-flight-plan", 400,
-              {"departure": "K", "destination": "!!!!"})
-expect_status("waypoints not a list", "POST", "/api/enhanced-flight-plan", 400,
-              {"departure": "KJFK", "destination": "KLAX", "waypoints": "KORD"})
-expect_status("too many waypoints",  "POST", "/api/enhanced-flight-plan", 400,
-              {"departure": "KJFK", "destination": "KLAX", "waypoints": ["KORD"] * 30})
-# Werkzeug may collapse the traversal in routing before our validator sees it;
-# either a 400 from validation or a 404 from routing means it went nowhere.
-expect_status("path traversal",      "GET",  "/api/alternates/..%2F..%2Fetc%2Fpasswd", (400, 404))
-expect_status("param injection",     "GET",  "/api/pirep-reports/KJFK%26id%3DKLAX", 400)
-expect_status("non-numeric radius",  "GET",  "/api/alternates/KJFK?radius=abc", 400)
-expect_status("wrong method",        "GET",  "/api/enhanced-flight-plan", 405)
+BRIEFINGS = f"{V1}/briefings"
+PARSE = f"{V1}/flight-plans/parse"
+rejected = [
+    expect_status("no codes",            "GET",  f"{V1}/airports", 400),
+    expect_status("too many codes",      "GET",  f"{V1}/airports?codes=" + ",".join(["KJFK"] * 201), 400),
+    expect_status("malformed airport",   "GET",  f"{V1}/airports/K!", 400),
+    expect_status("empty POST body",     "POST", PARSE, 400),
+    expect_status("empty text",          "POST", PARSE, 400, {"text": ""}),
+    expect_status("oversized text",      "POST", PARSE, 400, {"text": "x" * 20_000}),
+    expect_status("missing route",       "POST", BRIEFINGS, 400, {}),
+    expect_status("null idents",         "POST", BRIEFINGS, 400, {"departure": None, "destination": None}),
+    expect_status("non-numeric speed",   "POST", BRIEFINGS, 400,
+                  {"departure": "KJFK", "destination": "KLAX", "cruise_speed": "fast"}),
+    expect_status("malformed ICAO",      "POST", BRIEFINGS, 400, {"departure": "K", "destination": "!!!!"}),
+    expect_status("waypoints not a list", "POST", BRIEFINGS, 400,
+                  {"departure": "KJFK", "destination": "KLAX", "waypoints": "KORD"}),
+    expect_status("too many waypoints",  "POST", BRIEFINGS, 400,
+                  {"departure": "KJFK", "destination": "KLAX", "waypoints": ["KORD"] * 30}),
+    # Werkzeug may collapse the traversal in routing before our validator sees
+    # it; either a 400 from validation or a 404 from routing means it went
+    # nowhere.
+    expect_status("path traversal",      "GET",  f"{V1}/airports/..%2F..%2Fetc%2Fpasswd/alternates", (400, 404)),
+    expect_status("param injection",     "GET",  f"{V1}/airports/KJFK%26id%3DKLAX/pireps", 400),
+    expect_status("non-numeric radius",  "GET",  f"{V1}/airports/KJFK/alternates?radius=abc", 400),
+    expect_status("wrong method",        "GET",  BRIEFINGS, 405),
+]
+not_problems = [f"{status}" for status, headers, payload in rejected if not is_problem(status, headers, payload)]
+check("every rejection above is Problem Details", not not_problems, f"{len(not_problems)} were not")
 
 # --------------------------------------------------------------------------
 # Errors must not leak internals
 # --------------------------------------------------------------------------
 section("Error hygiene")
 
-_, _, payload = call("POST", "/api/enhanced-flight-plan", {"departure": "ZZZZ", "destination": "ZZZY"})
+_, _, payload = call("POST", BRIEFINGS, {"departure": "ZZZZ", "destination": "ZZZY"})
 message = json.dumps(payload)
 for leak in ("Traceback", "File \"", "navport/", "navport\\\\", "backend/", "site-packages"):
     check(f"error body hides '{leak}'", leak not in message, message[:160])
@@ -269,7 +373,7 @@ for leak in ("Traceback", "File \"", "navport/", "navport\\\\", "backend/", "sit
 # --------------------------------------------------------------------------
 section("Security headers")
 
-_, headers, _ = call("GET", "/api/health")
+_, headers, _ = call("GET", f"{V1}/health")
 for header, expected in [
     ("X-Content-Type-Options", "nosniff"),
     ("X-Frame-Options", "DENY"),
@@ -305,11 +409,15 @@ if limit > 500:
     print(f"  SKIP  limiter is configured at {limit}/window — too high to test cheaply")
 else:
     burst = limit + 15
-    codes = [call("GET", "/api/airports?codes=KJFK")[0] for _ in range(burst)]
-    throttled = codes.count(429)
-    check(f"burst of {burst} requests (limit {limit}) gets throttled", throttled > 0,
-          f"{throttled} refused"
-          if throttled else "no 429 at all — the limiter may be disabled")
+    responses = [call("GET", f"{V1}/airports?codes=KJFK") for _ in range(burst)]
+    refused = [(status, headers, payload) for status, headers, payload in responses if status == 429]
+    check(f"burst of {burst} requests (limit {limit}) gets throttled", bool(refused),
+          f"{len(refused)} refused" if refused else "no 429 at all — the limiter may be disabled")
+    if refused:
+        status, headers, payload = refused[0]
+        check("  the 429 says when to retry (Retry-After)", headers.get("Retry-After", "").isdigit(),
+              f"Retry-After: {headers.get('Retry-After')!r}")
+        check("  and is Problem Details", is_problem(status, headers, payload), str(payload)[:120])
 
 # --------------------------------------------------------------------------
 section("Result")

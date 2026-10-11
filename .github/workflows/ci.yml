@@ -59,7 +59,7 @@ jobs:
         # error before a browser does — and one bad module blanks the whole
         # page, because every other module imports through it.
         run: |
-          for f in $(find frontend/public/js -name '*.js') frontend/public/sw.js; do
+          for f in $(find frontend/public/js frontend/public/docs -name '*.js') frontend/public/sw.js; do
             node --check "$f" || exit 1
           done
 
@@ -112,7 +112,7 @@ jobs:
             --access-logfile ../api.log --error-logfile ../api.err
 
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8000/api/health > /dev/null; then
+            if curl -fsS http://127.0.0.1:8000/api/v1/health > /dev/null; then
               echo "up after ${i}s"; exit 0
             fi
             sleep 1
@@ -239,7 +239,7 @@ jobs:
           python frontend/tools/site.py serve --port 8080 --quiet &
 
           for i in $(seq 1 30); do
-            curl -fsS http://127.0.0.1:8000/api/health > /dev/null && \
+            curl -fsS http://127.0.0.1:8000/api/v1/health > /dev/null && \
             curl -fsS http://127.0.0.1:8080/ > /dev/null && break
             sleep 1
           done

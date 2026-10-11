@@ -57,7 +57,8 @@ async function request(path, options = {}, timeout = TIMEOUTS.default) {
 
     if (!res.ok) {
         throw new ApiError(
-            body?.error || `HTTP ${res.status} ${res.statusText}`,
+            // Errors are RFC 9457 Problem Details: `detail` is the reason.
+            body?.detail || `HTTP ${res.status} ${res.statusText}`,
             {
                 status: res.status,
                 retryAfter: body?.retry_after_seconds ?? null,
@@ -69,7 +70,7 @@ async function request(path, options = {}, timeout = TIMEOUTS.default) {
 }
 
 export function analyzeRoute(plan) {
-    return request('/api/enhanced-flight-plan', {
+    return request('/api/v1/briefings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -84,15 +85,15 @@ export function analyzeRoute(plan) {
 
 export function fetchAlternates(icao, { radius = 200, limit = 8 } = {}) {
     const q = new URLSearchParams({ radius: String(radius), limit: String(limit) });
-    return request(`/api/alternates/${encodeURIComponent(icao)}?${q}`);
+    return request(`/api/v1/airports/${encodeURIComponent(icao)}/alternates?${q}`);
 }
 
 export function fetchPireps(station, { raw = false, distance = 150, age = 6 } = {}) {
     const q = new URLSearchParams({ raw: String(raw), distance: String(distance), age: String(age) });
-    return request(`/api/pirep-reports/${encodeURIComponent(station)}?${q}`);
+    return request(`/api/v1/airports/${encodeURIComponent(station)}/pireps?${q}`);
 }
 
 /** Server reachability and whether its airport database loaded. */
 export function fetchHealth() {
-    return request('/api/health', {}, 5000);
+    return request('/api/v1/health', {}, 5000);
 }

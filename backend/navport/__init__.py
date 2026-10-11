@@ -8,17 +8,12 @@ touching the other.
 """
 
 import logging
-import time
 
-from flask import Flask, jsonify
+from flask import Flask
 
 from navport import config
 from navport.security import install_security
 from navport.telemetry import install_telemetry
-
-STARTED_AT = time.time()
-
-API_VERSION = '2.0'
 
 
 def create_app() -> Flask:
@@ -28,8 +23,8 @@ def create_app() -> Flask:
     app = Flask(__name__, static_folder=None)
 
     app.config['MAX_CONTENT_LENGTH'] = config.MAX_CONTENT_LENGTH
-    # Errors are JSON for every caller; there is no HTML error page to fall
-    # back on.
+    # Errors are Problem Details JSON for every caller (see problems.py);
+    # there is no HTML error page to fall back on.
     app.config['TRAP_HTTP_EXCEPTIONS'] = False
     # Keep the insertion order of response bodies, so a briefing reads in the
     # order it was built. Flask 2.3 moved this off app.config, where setting it
@@ -49,59 +44,10 @@ def create_app() -> Flask:
     if config.TELEMETRY_ENABLED:
         install_telemetry(app)
 
+    # Every endpoint — the API index, health, the OpenAPI description and the
+    # resources themselves — lives in navport/routes/.
     from navport.routes import register_routes
     register_routes(app)
-
-    @app.route('/')
-    @app.route('/api')
-    def index():
-        """What this service is and where its endpoints are.
-
-        Someone opening the API's address in a browser gets an explanation
-        rather than a bare 404, and a client can discover the endpoints from
-        one known URL instead of hard-coding every path.
-        """
-        return jsonify({
-            'service': 'NavPort API',
-            'version': API_VERSION,
-            'description': 'Aviation weather and route risk briefings, as JSON over HTTPS.',
-            'endpoints': {
-                'health': {'method': 'GET', 'path': '/api/health'},
-                'airports': {'method': 'GET', 'path': '/api/airports?codes={ICAO,...}'},
-                'alternates': {'method': 'GET', 'path': '/api/alternates/{icao}'},
-                'pilot_reports': {'method': 'GET', 'path': '/api/pirep-reports/{station}'},
-                'briefing': {'method': 'POST', 'path': '/api/enhanced-flight-plan'},
-                'parse_plan': {'method': 'POST', 'path': '/api/process-natural-language'},
-            },
-        })
-
-    @app.route('/api/health')
-    def health():
-        """Liveness/readiness probe.
-
-        Deliberately does not touch aviationweather.gov: an upstream outage
-        must not make Azure think the container is unhealthy and restart it in
-        a loop. It reports whether the bundled airport database loaded, which
-        is the one dependency a failed start would silently lose.
-        """
-        from navport.services import airports
-
-        known = airports.count()
-        return jsonify({
-            'status': 'ok' if known else 'degraded',
-            'version': API_VERSION,
-            'environment': config.ENV,
-            'uptime_seconds': round(time.time() - STARTED_AT, 1),
-            'airports_loaded': known,
-            # Published so a client can back off before being refused, and so
-            # the API test can size its burst to whatever is configured rather
-            # than assuming the defaults.
-            'limits': {
-                'requests_per_window': config.RATE_LIMIT_REQUESTS,
-                'briefings_per_window': config.BRIEFING_RATE_LIMIT,
-                'window_seconds': config.RATE_LIMIT_WINDOW_SECONDS,
-            },
-        }), (200 if known else 503)
 
     return app
 
@@ -126,5 +72,11 @@ def _install_cors(app: Flask) -> None:
         resources={r"/api/*": {"origins": config.CORS_ORIGINS}},
         methods=['GET', 'POST', 'OPTIONS'],
         allow_headers=['Content-Type'],
+        # A cross-origin script can read only a handful of "simple" response
+        # headers unless they are listed here. These are the ones the API uses
+        # to say something: when to retry, which methods a resource supports,
+        # and that an address is deprecated and where its replacement is. The
+        # API reference page shows them on every "Try it out" response.
+        expose_headers=['Retry-After', 'Allow', 'Deprecation', 'Sunset', 'Link'],
         max_age=3600,
     )

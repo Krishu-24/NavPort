@@ -15,6 +15,7 @@ how it's organised, and how you run it.
 |---|---|---|
 | **Name** | SkyHigh | NavPort |
 | **Backend** | One 1,492-line `app.py`, duplicated verbatim as `main.py` | `backend/` package — config, models, services, routes, telemetry |
+| **API** | Unversioned `/api/...` routes, some named after actions; ad-hoc error bodies | Versioned REST API under `/api/v1`, OpenAPI 3.1 contract with an interactive reference at `/docs/`, RFC 9457 error bodies; the old routes still answer, marked deprecated |
 | **Frontend** | One 1,535-line `index.html` with inline CSS + inline JS | 4 stylesheets + 16 ES modules, no build step |
 | **Theme** | Light only, blue gradients | Light **and** dark, with a toggle that remembers your choice |
 | **Typography** | Segoe UI system stack | IBM Plex Sans + IBM Plex Mono |

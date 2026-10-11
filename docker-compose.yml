@@ -2,7 +2,7 @@
 #
 #   docker compose up --build
 #   -> http://localhost:8080             the dashboard   (frontend container, nginx)
-#   -> http://localhost:8000/api/health  the API it calls (backend container, gunicorn)
+#   -> http://localhost:8000/api/v1/health  the API it calls (backend container, gunicorn)
 #
 # The same split production uses: the API on Azure Container Apps, the
 # dashboard on Azure Static Web Apps. Azure doesn't read this file — the API
@@ -54,7 +54,7 @@ services:
           memory: 1G
 
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/api/health"]
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/api/v1/health"]
       interval: 30s
       timeout: 5s
       start_period: 15s

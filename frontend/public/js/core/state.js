@@ -1,7 +1,7 @@
 /** Tiny observable store — the single source of truth for the dashboard. */
 
 const state = {
-    briefing: null,   // last successful /api/enhanced-flight-plan payload
+    briefing: null,   // last successful POST /api/v1/briefings payload
     loading: false,
     activeInterval: null,
 };

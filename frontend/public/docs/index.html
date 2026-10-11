@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="NavPort API reference — every endpoint, with requests you can send from the page.">
+    <title>NavPort · API reference</title>
+
+    <link rel="icon" href="/assets/icons/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32.png">
+
+    <!-- Swagger UI is vendored like the dashboard's other libraries
+         (scripts/vendor_assets.py), so this page loads nothing from a CDN. It
+         only has a light theme, which is why this page pins data-theme. -->
+    <link rel="stylesheet" href="/vendor/fonts/fonts.css">
+    <link rel="stylesheet" href="/vendor/swagger-ui/swagger-ui.css">
+    <link rel="stylesheet" href="/css/tokens.css">
+    <link rel="stylesheet" href="/css/docs.css">
+
+    <!-- Sets window.NAVPORT_API_BASE: the reference reads the API's own
+         description from wherever this deployment's API is. -->
+    <script src="/js/api-config.js"></script>
+</head>
+<body>
+    <header class="docs-bar">
+        <a class="docs-bar__back" href="/">← NavPort</a>
+        <span class="docs-bar__title">API reference</span>
+        <!-- href set by docs.js: the description lives on the API, not here. -->
+        <a class="docs-bar__spec" id="spec-link">openapi.json</a>
+    </header>
+
+    <main class="docs-main" id="swagger-ui">
+        <p class="docs-main__note">Loading the API description…</p>
+    </main>
+
+    <noscript>
+        <p class="docs-main__note">This page needs JavaScript. The raw description is at
+            <code>/api/v1/openapi.json</code> on the API.</p>
+    </noscript>
+
+    <script src="/vendor/swagger-ui/swagger-ui-bundle.js"></script>
+    <script type="module" src="/docs/docs.js"></script>
+</body>
+</html>

@@ -83,6 +83,6 @@ EXPOSE 8000
 # aviationweather.gov, so an upstream outage cannot make the orchestrator
 # decide this container is broken and restart it in a loop.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl --fail --silent --show-error "http://127.0.0.1:${PORT}/api/health" > /dev/null || exit 1
+    CMD curl --fail --silent --show-error "http://127.0.0.1:${PORT}/api/v1/health" > /dev/null || exit 1
 
 CMD ["gunicorn", "--config", "gunicorn.conf.py", "wsgi:app"]

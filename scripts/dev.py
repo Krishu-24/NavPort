@@ -66,7 +66,10 @@ def main() -> int:
     # The API runs exactly as `python backend/wsgi.py` would, in its own
     # process, so the development server's auto-reload and the console
     # telemetry behave normally. It prints the banner with both addresses.
-    env = {**os.environ, "NAVPORT_PORT": str(api_port), "NAVPORT_FRONTEND_PORT": str(web_port)}
+    # Development mode unless told otherwise: the API defaults to production,
+    # whose CORS allowlist doesn't include this dashboard's localhost origin.
+    env = {"NAVPORT_ENV": "development", **os.environ,
+           "NAVPORT_PORT": str(api_port), "NAVPORT_FRONTEND_PORT": str(web_port)}
     api = subprocess.Popen([sys.executable, str(API_ENTRY)], env=env)
 
     try:

@@ -352,7 +352,7 @@ def print_banner(app_name: str, host: str, port: int, lan_ips=None, frontend_por
         rows += [
             (f"{GREEN}Open{RESET}",    f"{GREEN}http://{ip}:{web_port}/{RESET}"),
             (f"{GREY}This PC{RESET}",  f"{CYAN}http://127.0.0.1:{web_port}/{RESET}"),
-            (f"{GREY}API{RESET}",      f"{CYAN}http://{ip}:{port}/api/health{RESET}"),
+            (f"{GREY}API{RESET}",      f"{CYAN}http://{ip}:{port}/api/v1/health{RESET}"),
             ('', ''),
             (f"{FAINT}Open works on this laptop and on any phone on{RESET}", ''),
             (f"{FAINT}the same Wi-Fi. 127.0.0.1 only ever means \"the{RESET}", ''),
@@ -361,7 +361,7 @@ def print_banner(app_name: str, host: str, port: int, lan_ips=None, frontend_por
     else:
         rows += [
             (f"{GREEN}Open{RESET}", f"{GREEN}http://127.0.0.1:{web_port}/{RESET}"),
-            (f"{GREY}API{RESET}",  f"{CYAN}http://127.0.0.1:{port}/api/health{RESET}"),
+            (f"{GREY}API{RESET}",  f"{CYAN}http://127.0.0.1:{port}/api/v1/health{RESET}"),
             ('', ''),
             (f"{FAINT}Listening on this machine only, so there is no{RESET}", ''),
             (f"{FAINT}phone address. For one, start it with:{RESET}", ''),

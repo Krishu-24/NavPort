@@ -528,10 +528,10 @@ def main() -> int:
     base = args.base.rstrip("/")
 
     try:
-        with urllib.request.urlopen(f"{base}/api/health", timeout=5) as r:  # noqa: S310
+        with urllib.request.urlopen(f"{base}/api/v1/health", timeout=5) as r:  # noqa: S310
             health = json.load(r)
     except Exception as exc:
-        print(f"Cannot reach {base}/api/health — start the server first.\n  {exc}")
+        print(f"Cannot reach {base}/api/v1/health — start the server first.\n  {exc}")
         return 2
     print(f"server: {health.get('status')}, {health.get('airports_loaded')} airports, env {health.get('environment')}")
 

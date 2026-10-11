@@ -55,6 +55,16 @@ PINS: dict[str, tuple[str, str | None]] = {
         "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js",
         "sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4",
     ),
+    # The API reference page (frontend/public/docs/) renders the API's OpenAPI
+    # description with Swagger UI. Only the docs page loads these.
+    "swagger-ui/swagger-ui.css": (
+        "https://unpkg.com/swagger-ui-dist@5.33.1/swagger-ui.css",
+        "sha384-Ov4/wv3j2bmct8cDc5X4ngJZohVPzEmc6uDPH8WeljUxO5vtoykvMEfbu9Vh6RaW",
+    ),
+    "swagger-ui/swagger-ui-bundle.js": (
+        "https://unpkg.com/swagger-ui-dist@5.33.1/swagger-ui-bundle.js",
+        "sha384-ZPehFMQommnnuaZ4rpxgkgTT2DKFVp4hZC/7pLit+9Lek9T1YGSo23eHFbvNkXkw",
+    ),
 }
 
 # leaflet.css references these by relative path. The app draws its own markers

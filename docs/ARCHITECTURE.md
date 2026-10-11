@@ -63,15 +63,15 @@ that, and each has one home:
    │                                           │ nginx                         │
    │                                           └──────────────────────────────┘
    │
-   │ 2. OPTIONS /api/enhanced-flight-plan  (CORS preflight)
-   │ 3. POST    /api/enhanced-flight-plan  (JSON flight plan)
+   │ 2. OPTIONS /api/v1/briefings  (CORS preflight)
+   │ 3. POST    /api/v1/briefings  (JSON flight plan)
    ├──────────────────────────────────────────▶┌──────────────────────────────┐
    │◀──────────────────────────────────────────│ API — Flask                   │
    │   JSON: route, timeline, risk,            │ routes/flight_routes.py       │
    │   NOTAMs, briefing                        └──────────────┬───────────────┘
    │                                                          │
-   │ 4. GET /api/pirep-reports/{id},                          ▼
-   │    GET /api/alternates/{icao}            ┌──────────────────────────────┐
+   │ 4. GET /api/v1/airports/{icao}/pireps,                   ▼
+   │    GET /api/v1/airports/{icao}/alternates┌──────────────────────────────┐
    │    (on demand)                           │ WeatherProcessor               │
    │                                          │ services/weather_service.py    │
    │                                          └──────────────┬───────────────┘
@@ -86,7 +86,7 @@ that, and each has one home:
 
 1. The browser loads the dashboard (`frontend/public/index.html`) from the
    static host. `api-config.js` runs first and tells the app where the API is.
-2. Submitting the flight plan sends `POST /api/enhanced-flight-plan` to the
+2. Submitting the flight plan sends `POST /api/v1/briefings` to the
    API. Because it's a cross-origin JSON POST, the browser first sends an
    `OPTIONS` preflight, which the API approves for the dashboard's origin.
 3. `WeatherProcessor.calculate_flight_path()` resolves each ICAO code to
@@ -115,6 +115,8 @@ that, and each has one home:
 
 ## 3. The API as a REST service
 
+### Constraints
+
 NavPort's API follows the REST architectural constraints:
 
 - **Client–server.** The dashboard and the API are separate programs on
@@ -125,19 +127,112 @@ NavPort's API follows the REST architectural constraints:
   run two copies under load — any copy can answer any request. (The rate
   limiter and the weather cache are per-process optimisations, not session
   state: losing either changes speed, never an answer.)
-- **Cacheable.** Upstream weather is cached server-side for five minutes;
-  responses to clients are marked `Cache-Control: no-store`, because weather
-  goes stale and no intermediary should serve an old briefing.
+- **Cacheable.** Every response says whether it may be reused. Weather —
+  briefings, alternates, PIREPs, health — is `Cache-Control: no-store`, because
+  it goes stale and no intermediary should serve an old briefing. An airport
+  (`GET /api/v1/airports/{icao}`) is `public, max-age=86400`: it doesn't move.
+  The API's own description is cacheable for five minutes. Upstream weather is
+  separately cached server-side for five minutes.
 - **Layered.** Clients can't tell whether they reach the API directly or
   through Azure's ingress proxy — which is why `NAVPORT_TRUST_PROXY` exists, to
   recover the real client address from `X-Forwarded-For` behind that layer.
-- **Uniform interface.** URLs identify things, HTTP methods say what's being
-  done (`GET` to read, `POST` to submit a flight plan), representations are
-  JSON, and status codes carry meaning: `400` invalid input, `404` unknown
-  airport, `405` wrong method, `413` body too large, `429` rate limited with a
-  `Retry-After` header, `503` upstream unavailable. Errors are JSON too,
-  `{"error": "..."}`, and never include internals. `GET /` describes the API
-  and lists its endpoints, so a client can start from one known URL.
+- **Uniform interface.** Covered in the rest of this section: resources with
+  their own URLs, methods with standard meanings, self-describing messages,
+  and links between resources.
+
+### Resources
+
+| Resource | URL | Methods | Archetype |
+|---|---|---|---|
+| The API | `/api/v1` | `GET` | document — the entry point |
+| Airports | `/api/v1/airports?codes=…` | `GET` | collection, filtered by query |
+| An airport | `/api/v1/airports/{icao}` | `GET` | document |
+| Its alternates | `/api/v1/airports/{icao}/alternates` | `GET` | sub-collection |
+| Its pilot reports | `/api/v1/airports/{icao}/pireps` | `GET` | sub-collection |
+| Briefings | `/api/v1/briefings` | `POST` | collection — submit a plan, get its briefing |
+| Parse | `/api/v1/flight-plans/parse` | `POST` | controller — an action, not a thing |
+| Health | `/api/v1/health` | `GET` | document |
+| The contract | `/api/v1/openapi.json` | `GET` | document |
+
+URLs are nouns, plural for collections, and nested where one resource belongs
+to another — an airport's alternates live under that airport. `GET` only ever
+reads, so it is safe to repeat or prefetch; `POST` carries a body to be
+processed. The parse endpoint is the deliberate exception: it is an operation
+rather than a resource, so — following the usual convention for *controller*
+resources — it is named with a verb under the collection it acts on.
+
+A briefing is computed, not stored, so `POST /api/v1/briefings` answers `200`
+with the briefing rather than `201 Created` with a `Location` to fetch it
+from: there is nothing to fetch later. Storing briefings would make that a
+true create, at the cost of state the API currently doesn't keep.
+
+### Messages
+
+Representations are JSON. Status codes carry the outcome — `400` invalid
+input, `404` no such resource, `405` wrong method, `413` body too large, `429`
+rate limited, `503` upstream unavailable — and the headers carry what the
+status implies: a `405` lists the methods that *are* allowed (`Allow`), a
+`429` says when to come back (`Retry-After`).
+
+Every error body is an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)
+**Problem Details** document, media type `application/problem+json`:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Not Found",
+  "status": 404,
+  "detail": "No airport with identifier ZZZZ in the database",
+  "instance": "/api/v1/airports/ZZZZ"
+}
+```
+
+One shape for every failure means a client has one error path, and the
+`detail` is written to be shown to a person. Errors never include internals;
+`backend/tests/api_test.py` checks for stack traces and file paths.
+
+### Links
+
+`GET /api/v1` lists every resource as a link, using
+[RFC 6570](https://www.rfc-editor.org/rfc/rfc6570) URI templates where a value
+has to be filled in (`/api/v1/airports/{icao}`). An airport links to its own
+alternates and pilot reports. A client can start at one known address and
+follow links rather than building URLs — the idea behind level 3 of the
+Richardson maturity model, applied here where it is cheap. Levels 1 and 2 —
+resources, and HTTP methods and status codes used for their meaning — hold
+throughout.
+
+### The contract
+
+`backend/navport/openapi.py` describes the whole API in **OpenAPI 3.1**, served
+at `GET /api/v1/openapi.json`. The limits it documents (waypoints per route,
+codes per lookup, text length) are read from `config.py`, the same values the
+validators enforce, so the documentation can't drift from the behaviour. The
+dashboard's `/docs/` page renders it with Swagger UI, from which every
+endpoint can be called against the live API. The API test checks that every
+link in the index is documented.
+
+### Versioning
+
+The version is in the path, `/api/v1`, where it is visible in every URL and
+every access-log line. The API's first addresses were unversioned and partly
+named after actions (`/api/enhanced-flight-plan`, `/api/pirep-reports/KJFK`).
+They still work — `routes/legacy_routes.py` maps each to the same handler as
+its v1 successor — so no existing client broke when v1 shipped. Each of their
+responses carries three standard headers:
+
+```
+Deprecation: @1791763200                                RFC 9745 — deprecated since 12 Oct 2026
+Sunset: Tue, 12 Jan 2027 00:00:00 GMT                   RFC 8594 — may stop working after
+Link: </api/v1/briefings>; rel="successor-version"      RFC 5829 — use this instead
+```
+
+Their error bodies also keep the old `error` member beside the Problem Details
+fields, because that is what their clients read. Rate limits are counted per
+handler, not per URL, so the old and new address of one endpoint share a
+budget.
+
+### NavPort as a REST client
 
 NavPort is also a **REST client**: one briefing request becomes about seven
 requests to the Aviation Weather Center's own REST API, whose answers are
@@ -154,9 +249,11 @@ NavPort/
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   ├── navport/
-│   │   ├── __init__.py           # App factory: API index, /api/health, CORS
+│   │   ├── __init__.py           # App factory: CORS, security, routes
 │   │   ├── config.py             # Settings with production-safe defaults, lookup tables
-│   │   ├── security.py           # Security headers, rate limiting, gzip, JSON errors
+│   │   ├── security.py           # Security headers, rate limiting, gzip, error handlers
+│   │   ├── problems.py           # RFC 9457 Problem Details — the shape of every error
+│   │   ├── openapi.py            # The OpenAPI 3.1 contract, built from config limits
 │   │   ├── validation.py         # Input validation — bad input is 4xx, not 500
 │   │   ├── cache.py              # TTL cache for upstream calls
 │   │   ├── telemetry.py          # Live console reporting (development)
@@ -170,8 +267,11 @@ NavPort/
 │   │   │   ├── nlp_processor.py  # METAR decoding, briefing text, risk scoring
 │   │   │   └── weather_service.py# Flight path, concurrent fetch, timeline, alternates
 │   │   └── routes/
-│   │       ├── flight_routes.py  # /api/enhanced-flight-plan, /api/airports, /api/alternates, /api/process-natural-language
-│   │       └── pirep_routes.py   # /api/pirep-reports/<station_id>
+│   │       ├── __init__.py       # The v1 and legacy blueprints, and registration
+│   │       ├── meta.py           # /api/v1 index, /health, /openapi.json
+│   │       ├── flight_routes.py  # /airports, /airports/{icao}, …/alternates, /briefings, /flight-plans/parse
+│   │       ├── pirep_routes.py   # /airports/{icao}/pireps
+│   │       └── legacy_routes.py  # The original /api/... addresses, as deprecated aliases
 │   └── tests/
 │       ├── api_test.py           # End-to-end against a running API
 │       └── test_risk.py          # Risk scoring, no server
@@ -190,7 +290,8 @@ NavPort/
 │   │   │   ├── core/             # api (fetch layer) · state · dom · format · idents
 │   │   │   ├── ui/               # shell · theme · recent · toast · offline · board (split-flap)
 │   │   │   └── views/            # overview · risk · ribbon · map · charts · notams · timeline · alternates · pireps
-│   │   ├── vendor/               # Leaflet, Chart.js, IBM Plex
+│   │   ├── docs/                 # API reference: Swagger UI over the API's openapi.json
+│   │   ├── vendor/               # Leaflet, Chart.js, Swagger UI, IBM Plex
 │   │   └── assets/               # icon.png + generated icons
 │   ├── tools/site.py             # Dev server · nginx config · `configure --api-base`
 │   ├── tests/site_test.py        # End-to-end against any served copy
@@ -291,7 +392,7 @@ timeline can still be rendered and risk-scored.
   run by Azure Container Apps, which terminates TLS and forwards to port
   **8000**. `NAVPORT_ENV=production` and `NAVPORT_TRUST_PROXY=true` are set
   there, and `NAVPORT_CORS_ORIGINS` names the dashboard's address.
-  `/api/health` is the liveness probe: it only checks that the app started and
+  `/api/v1/health` is the liveness probe: it only checks that the app started and
   `airports.json.gz` loaded — not that aviationweather.gov is reachable — so an
   upstream outage cannot make the orchestrator reboot the container in a loop.
   Scale-to-zero (`minReplicas: 0`) is what keeps it free; the first request

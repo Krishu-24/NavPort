@@ -1,24 +1,28 @@
-"""PIREP lookup endpoint used by the pilot-reports modal."""
+"""Pilot reports near an airport, used by the pilot-reports panel.
+
+    GET /api/v1/airports/{icao}/pireps?distance=150&age=2&raw=false
+"""
 
 import logging
 
-from flask import Blueprint, jsonify, request
+from flask import jsonify, request
 
 from navport import validation
 from navport.models.pirep import make_summary
+from navport.routes import api_v1
 from navport.services.pirep_service import PIREPService
 
 log = logging.getLogger(__name__)
 
-pirep_bp = Blueprint('pirep', __name__, url_prefix='/api')
 pirep_service = PIREPService(verbose=False)
 
 
-@pirep_bp.route('/pirep-reports/<station_id>', methods=['GET'])
-def get_pirep_reports(station_id):
-    """Get PIREP reports for a specific station, either as plain-English
-    summaries or the original raw report text (?raw=true)."""
-    station = validation.icao(station_id, 'station id')
+@api_v1.route('/airports/<icao>/pireps', methods=['GET'])
+def list_pireps(icao):
+    """PIREPs reported near an airport, as plain-English summaries or the
+    original raw report text (?raw=true). A sub-collection of the airport:
+    the reports belong to the place they were filed around."""
+    station = validation.icao(icao, 'airport code')
     distance_mi = validation.integer(
         request.args.get('distance'), 'distance', default=150, minimum=10, maximum=500)
     age_hours = validation.integer(

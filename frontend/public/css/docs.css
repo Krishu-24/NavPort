@@ -1,0 +1,59 @@
+/* ==========================================================================
+   NavPort · API reference page (docs/index.html)
+   Only the bar around Swagger UI; Swagger UI styles itself.
+   ========================================================================== */
+
+body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--sans);
+}
+
+.docs-bar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: var(--s4);
+    padding: var(--s3) var(--s5);
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    font-size: 14px;
+}
+
+.docs-bar__back,
+.docs-bar__spec {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.docs-bar__back:hover,
+.docs-bar__spec:hover {
+    color: var(--accent-hover);
+    text-decoration: underline;
+}
+
+.docs-bar__title {
+    font-weight: 600;
+}
+
+.docs-bar__spec {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 12.5px;
+}
+
+.docs-main__note {
+    max-width: 1460px;
+    margin: var(--s6) auto;
+    padding: 0 var(--s5);
+    color: var(--ink-3);
+}
+
+@media (max-width: 600px) {
+    .docs-bar {
+        padding: var(--s3) var(--s4);
+    }
+}

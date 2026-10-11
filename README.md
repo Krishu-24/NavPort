@@ -68,7 +68,7 @@ Two containers start:
 | Container | Serves | Open |
 |---|---|---|
 | `navport-frontend` | the dashboard, via nginx | **http://localhost:8080** |
-| `navport-backend` | the API, via gunicorn | **http://localhost:8000/api/health** |
+| `navport-backend` | the API, via gunicorn | **http://localhost:8000/api/v1/health** |
 
 The backend runs in production mode, so the dashboard reaches it only because
 `docker-compose.yml` names the dashboard's origin in `NAVPORT_CORS_ORIGINS` —
@@ -134,7 +134,7 @@ Full request flow, module responsibilities and design rationale are in
 NavPort/
 ├── backend/                       # The API — its own Docker image
 │   ├── navport/                   # The Python package
-│   │   ├── __init__.py            # App factory: API index, /api/health, CORS
+│   │   ├── __init__.py            # App factory: CORS, security, routes
 │   │   ├── config.py              # Settings, production-safe defaults
 │   │   ├── security.py            # Headers, rate limiting, gzip, error handling
 │   │   ├── validation.py          # Input validation — bad input is 4xx, not 500
@@ -142,7 +142,9 @@ NavPort/
 │   │   ├── telemetry.py           # Live console device/traffic reporting (dev)
 │   │   ├── models/pirep.py        # PIREP dataclass + raw-text parsing
 │   │   ├── services/              # flight_rules · pirep · nlp · weather · airports
-│   │   ├── routes/                # /api/* Flask blueprints
+│   │   ├── routes/                # /api/v1 blueprints · meta · deprecated /api aliases
+│   │   ├── openapi.py             # The OpenAPI 3.1 contract, served at /api/v1/openapi.json
+│   │   ├── problems.py            # RFC 9457 Problem Details error responses
 │   │   └── data/airports.json.gz  # 34,000 airports, bundled
 │   ├── tests/
 │   │   ├── api_test.py            # End-to-end against a running API
@@ -167,7 +169,8 @@ NavPort/
 │   │   │   ├── core/              # api · state · dom · format · idents
 │   │   │   ├── ui/                # shell · theme · recent · toast · offline · board
 │   │   │   └── views/             # overview · risk · ribbon · map · charts · notams · timeline · alternates · pireps
-│   │   ├── vendor/                # Leaflet, Chart.js, IBM Plex — served from our own origin
+│   │   ├── docs/                  # API reference page (Swagger UI over the API's own openapi.json)
+│   │   ├── vendor/                # Leaflet, Chart.js, Swagger UI, IBM Plex — served from our own origin
 │   │   └── assets/                # icon.png + generated icon set
 │   ├── tools/site.py              # Dev server · nginx config · per-deployment API address
 │   ├── tests/site_test.py         # End-to-end against any served copy, including production
@@ -190,20 +193,44 @@ NavPort/
 
 ## API Endpoints
 
-A REST-style JSON API. Every response is JSON, including errors
-(`{"error": "..."}`), and the status codes carry meaning: `400` bad input,
-`404` unknown resource, `405` wrong method, `413` body too large, `429` rate
-limited (with `Retry-After`), `503` upstream weather unavailable.
+A versioned REST API under **`/api/v1`**. The full contract is an OpenAPI 3.1
+document the API serves about itself, `GET /api/v1/openapi.json`, and the
+dashboard renders it as an interactive reference at **`/docs/`** — every
+endpoint below can be called from that page.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/` or `/api` | What this service is, and where its endpoints are |
-| `GET` | `/api/health` | Liveness: `"status":"ok"` if the airport DB loaded. Docker and Azure probe this |
-| `POST` | `/api/enhanced-flight-plan` | Full route analysis: weather timeline, NOTAMs, risk assessment, briefing |
-| `POST` | `/api/process-natural-language` | Extracts departure/destination/waypoints/speed from free text |
-| `GET` | `/api/pirep-reports/<station_id>` | PIREPs near a station (`?distance=`, `?age=`, `?raw=true\|false`) |
-| `GET` | `/api/airports` | Resolve identifiers to IATA + name (`?codes=KJFK,EGLL`) |
-| `GET` | `/api/alternates/<icao>` | Usable diversion airports near an airport (`?radius=`, `?limit=`, `?runway=`) |
+| `GET` | `/api/v1` | Index: what the service is and a link to every resource |
+| `GET` | `/api/v1/health` | Liveness and readiness. Docker and Azure probe this; never rate limited |
+| `GET` | `/api/v1/openapi.json` | The contract, as OpenAPI 3.1 |
+| `GET` | `/api/v1/airports?codes=KJFK,EGLL` | Look up several airports at once |
+| `GET` | `/api/v1/airports/{icao}` | One airport, with links to its alternates and pilot reports |
+| `GET` | `/api/v1/airports/{icao}/alternates` | Usable diversions nearby, best first (`?radius=`, `?limit=`, `?runway=`) |
+| `GET` | `/api/v1/airports/{icao}/pireps` | Pilot reports near the airport (`?distance=`, `?age=`, `?raw=`) |
+| `POST` | `/api/v1/briefings` | Brief a flight plan: weather timeline, NOTAMs, risk, plain-English summary |
+| `POST` | `/api/v1/flight-plans/parse` | Turn free text ("KJFK to KLAX via KORD") into a flight plan |
+
+**How it follows REST.** URLs name resources — nouns, plural for collections,
+nested where one belongs to another (an airport's alternates). The HTTP method
+is the verb: `GET` reads and is safe to repeat, `POST` sends data to be
+processed. Status codes carry the outcome: `200`, `400` invalid input, `404` no
+such resource, `405` wrong method (with an `Allow` header), `413` body too
+large, `429` rate limited (with `Retry-After`), `503` upstream weather
+unavailable. Every error body is an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)
+Problem Details document (`application/problem+json`) with the same fields, so
+a client handles every failure one way. The API is stateless — no sessions, any
+replica can answer any request — and responses say whether they may be cached
+(an airport for a day; weather never). The index and each airport carry
+`links` to related resources, so a client can follow them instead of building
+URLs. `/api/v1/flight-plans/parse` is the one *controller* resource: an action
+rather than a thing, so its name ends in a verb.
+
+**Versioning.** The original endpoints (`/api/health`,
+`/api/enhanced-flight-plan`, `/api/pirep-reports/…` and so on) still answer,
+running the same code, so nothing written against them broke. Each response
+from them says it is deprecated (`Deprecation`), when it may stop working
+(`Sunset`) and where its replacement is (`Link: <…>; rel="successor-version"`).
+The full mapping is in `backend/navport/routes/legacy_routes.py`.
 
 ## Technology Stack
 

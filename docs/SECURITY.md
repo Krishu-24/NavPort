@@ -71,15 +71,18 @@ which hands the caller whatever the exception happened to contain —
 filesystem paths, the upstream URL and its parameters, internal hostnames.
 
 **Fix.** A single `Exception` handler logs the full traceback server-side and
-returns an opaque `{"error": "Internal server error"}`. Client errors raise
-`validation.BadRequest`, whose message is written to be safe to show. The
+returns an opaque 500 — today an RFC 9457 Problem Details body whose `detail`
+is just "Internal server error." (`backend/navport/problems.py`). Client
+errors raise `validation.BadRequest`, whose message is written to be safe to
+show. The
 API test asserts that error bodies contain no `Traceback`, no `File "`, no
 `navport/`, no `backend/` and no `site-packages`.
 
 ### 4. Unvalidated identifiers reached the upstream query string
 
-`/api/alternates/<icao>` and `/api/pirep-reports/<station_id>` interpolated
-the path segment straight into a request to aviationweather.gov. `requests`
+`/api/alternates/<icao>` and `/api/pirep-reports/<station_id>` — today
+`/api/v1/airports/{icao}/alternates` and `…/pireps` — interpolated the path
+segment straight into a request to aviationweather.gov. `requests`
 url-encodes parameters, so this was not exploitable as injection, but it was
 one refactor away from being so, and it let arbitrary strings out to a third
 party.
