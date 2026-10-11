@@ -11,3 +11,10 @@
 *.ico      binary
 *.jpg      binary
 *.gz       binary
+
+# Third-party files are stored byte-for-byte. scripts/vendor_assets.py checks
+# each against a pinned SHA-384, and upstream leaflet.css has CRLF line
+# endings: converting them on commit changed 661 bytes, so the copy CI checked
+# out never matched its own hash. No line-ending conversion, in either
+# direction, for anything we didn't write.
+frontend/public/vendor/** -text

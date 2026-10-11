@@ -42,7 +42,7 @@ jobs:
             args: ''
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Linux system dependencies
         if: matrix.os == 'ubuntu-22.04'
@@ -52,7 +52,7 @@ jobs:
             libwebkit2gtk-4.1-dev build-essential curl wget file \
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -96,7 +96,7 @@ jobs:
           prerelease: false
 
       - name: Upload artefacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: navport-${{ matrix.label }}
           retention-days: 14
@@ -112,9 +112,9 @@ jobs:
     name: Android
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
 
@@ -164,7 +164,7 @@ jobs:
       # sign locally. The APK below installs on a device with "unknown
       # sources" enabled, which is enough to demo it.
       - name: Upload the APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: navport-android-unsigned
           retention-days: 14
@@ -175,9 +175,9 @@ jobs:
     name: iOS (simulator)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
 
