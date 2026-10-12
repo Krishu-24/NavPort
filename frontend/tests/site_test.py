@@ -196,7 +196,10 @@ check(f"  CSP lets the page call its API ({api_origin})",
 origins = set()
 for source in ("js/views/map.js", "index.html", "js/core/api.js"):
     _, _, body = call("/" + source)
-    for match in re.finditer(r"https://([A-Za-z0-9.-]+\.[A-Za-z]{2,})", str(body)):
+    # A link (<a href>) is somewhere the user goes, not something the page
+    # loads, and the CSP rightly says nothing about it.
+    loaded = re.sub(r"<a\b[^>]*>", "", str(body))
+    for match in re.finditer(r"https://([A-Za-z0-9.-]+\.[A-Za-z]{2,})", loaded):
         host = match.group(1)
         if not host.endswith(("w3.org", "schema.org", "tauri.app")):
             origins.add(host)
@@ -210,7 +213,9 @@ for host in sorted(origins):
 # outage cannot blank the map, and so the packaged apps open without a
 # network. A reintroduced <script src="https://..."> would undo both quietly.
 for name, page in (("index.html", index), ("docs/index.html", docs)):
-    external = re.findall(r'(?:src|href)="(https?://[^"]+)"', str(page))
+    # Only what the page *loads*: <script src> and <link href>. An ordinary
+    # <a href> to another site (the desktop downloads) loads nothing.
+    external = re.findall(r'<(?:script|link)\b[^>]*\b(?:src|href)="(https?://[^"]+)"', str(page))
     check(f"{name} loads no third-party scripts or styles", not external, f"found: {external[:3]}")
 for directive in ("script-src", "font-src"):
     ok = csp_directive(csp, directive) == ["'self'"]

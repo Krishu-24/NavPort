@@ -115,6 +115,21 @@ jobs:
           args: ${{ matrix.args }}
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: 'NavPort ${{ github.ref_name }}'
+          releaseBody: |
+            Desktop apps for NavPort: the same dashboard as the website, in its own window, talking to the same API.
+
+            | Platform | Download |
+            |---|---|
+            | Windows 10/11 | `NavPort_…_x64-setup.exe` (or the `.msi`) |
+            | macOS, Apple Silicon | `NavPort_…_aarch64.dmg` |
+            | macOS, Intel | `NavPort_…_x64.dmg` |
+            | Linux | `.AppImage` (any distro) or `.deb` (Debian/Ubuntu) |
+
+            These builds aren't code-signed (a signing certificate costs money), so the first launch shows a warning:
+            - **Windows** — "Windows protected your PC": click **More info → Run anyway**.
+            - **macOS** — "cannot be opened": right-click the app → **Open** → **Open**.
+
+            Built by GitHub Actions from this tag's source (`.github/workflows/apps.yml`).
           releaseDraft: true
           prerelease: false
 

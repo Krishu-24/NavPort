@@ -131,7 +131,13 @@
         <footer class="rail__foot">
             <span class="dot dot--ok" aria-hidden="true"></span>
             <span>Live data · aviationweather.gov</span>
-            <a class="rail__api" href="/docs/">API reference</a>
+            <span class="rail__links">
+                <a href="/docs/">API reference</a>
+                <!-- Installers are attached to GitHub Releases by .github/workflows/apps.yml.
+                     Hidden inside the desktop app itself (platform.css). -->
+                <a class="rail__download" href="https://github.com/Krishu-24/NavPort/releases/latest"
+                   target="_blank" rel="noopener">Desktop app</a>
+            </span>
         </footer>
     </aside>
 

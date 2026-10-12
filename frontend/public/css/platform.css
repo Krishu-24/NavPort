@@ -340,6 +340,11 @@ body.is-offline .topbar {
    sets this class on <html>.
    -------------------------------------------------------------------------- */
 
+/* Offering the desktop app from inside the desktop app is just noise. */
+html.is-native .rail__download {
+    display: none;
+}
+
 html.is-native .topbar {
     /* Tauri's window-controls-overlay leaves the top strip to the OS buttons,
        and this makes the rest of the bar draggable like a real title bar. */
