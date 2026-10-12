@@ -24,6 +24,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000").rstrip("/")
@@ -439,7 +440,13 @@ if ceiling > 500:
     print(f"  SKIP  limiter allows {ceiling}/window — too high to test cheaply")
 else:
     burst = ceiling + 15
-    responses = [call("GET", f"{V1}/airports?codes=KJFK") for _ in range(burst)]
+    # Sent 8 at a time. One after another, each waits a full round trip:
+    # from a laptop to Azure that is ~0.7 s, so 135 requests spread over 90
+    # seconds — slower than the limit — and none is refused. 8 stays under the
+    # 10 concurrent requests at which Azure adds a replica, which would give
+    # the burst a second, empty set of counters.
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        responses = list(pool.map(lambda _: call("GET", f"{V1}/airports?codes=KJFK"), range(burst)))
     refused = [(status, headers, payload) for status, headers, payload in responses if status == 429]
     check(f"burst of {burst} requests (limit {limit} x {workers} worker processes) gets throttled",
           bool(refused),
