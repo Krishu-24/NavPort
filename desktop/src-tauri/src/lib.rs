@@ -14,6 +14,8 @@
 //! shipped app cannot be repointed at another backend by editing something
 //! next to the executable.
 
+use tauri::{WebviewUrl, WebviewWindowBuilder};
+
 /// The deployed API origin, taken from `NAVPORT_API_BASE` at compile time.
 ///
 /// Set it when building:
@@ -73,7 +75,29 @@ fn json_string(value: &str) -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .initialization_script(&init_script())
+        // The window is created here rather than listed in tauri.conf.json
+        // because the initialisation script can only be attached to a window
+        // as it is built — tauri::Builder has no app-wide equivalent.
+        .setup(|app| {
+            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+                .initialization_script(init_script());
+
+            // Window chrome only exists on desktop; on a phone the webview is
+            // the whole screen.
+            #[cfg(desktop)]
+            let window = window
+                .title("NavPort")
+                .inner_size(1280.0, 860.0)
+                .min_inner_size(380.0, 560.0)
+                .resizable(true)
+                .center()
+                // The dashboard accepts no dropped files, so the native
+                // file-drop handler has nothing to do.
+                .disable_drag_drop_handler();
+
+            window.build()?;
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running NavPort");
 }
