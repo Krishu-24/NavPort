@@ -41,6 +41,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # The runner is amd64. Building the arm64 image runs its RUN steps (pip,
+      # apt-get) as arm64 programs, which needs QEMU emulation registered first.
+      - uses: docker/setup-qemu-action@v3
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
