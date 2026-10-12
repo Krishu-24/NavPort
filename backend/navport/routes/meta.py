@@ -75,6 +75,9 @@ def health():
             'requests_per_window': config.RATE_LIMIT_REQUESTS,
             'briefings_per_window': config.BRIEFING_RATE_LIMIT,
             'window_seconds': config.RATE_LIMIT_WINDOW_SECONDS,
+            # Each worker process counts separately (security.py), so the
+            # most a client can actually make is the limit times this.
+            'worker_processes': config.WORKER_PROCESSES,
         },
     }), (200 if known else 503)
 

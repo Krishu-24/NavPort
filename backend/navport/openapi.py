@@ -85,6 +85,11 @@ def _schemas() -> dict:
                         'requests_per_window': {'type': 'integer'},
                         'briefings_per_window': {'type': 'integer'},
                         'window_seconds': {'type': 'integer'},
+                        'worker_processes': {
+                            'type': 'integer',
+                            'description': 'Each server process counts requests separately, so a client '
+                                           'is refused after at most the limit times this many.',
+                        },
                     },
                 },
             },

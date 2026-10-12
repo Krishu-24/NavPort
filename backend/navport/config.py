@@ -90,6 +90,10 @@ RATE_LIMIT_WINDOW_SECONDS = _int("NAVPORT_RATE_WINDOW", 60)
 # Briefings are the expensive endpoint; they get a tighter budget of their own.
 BRIEFING_RATE_LIMIT = _int("NAVPORT_BRIEFING_RATE_LIMIT", 10)
 
+# Worker processes serving the app — set by gunicorn.conf.py, 1 under the
+# development server. The limits above apply in each one.
+WORKER_PROCESSES = _int("NAVPORT_WORKERS", 1)
+
 # Only trust X-Forwarded-For when something we control is actually setting it.
 # Azure Container Apps and App Service both terminate TLS at their ingress and
 # set it; a directly-exposed server must not, or any client can spoof its IP

@@ -36,6 +36,26 @@ PASSED: list[str] = []
 FAILED: list[str] = []
 
 
+def open_url(req: urllib.request.Request, timeout: int):
+    """urlopen, retrying a request that never reached the server.
+
+    urllib raises URLError (and not its HTTPError subclass, which is a real
+    answer) only when connecting, the TLS handshake or sending the request
+    failed. A flaky Wi-Fi does that now and then, and it says nothing about
+    the API. A timeout *waiting for the response* is not retried: that request
+    did arrive, and a second copy would count against the rate limit.
+    """
+    for _ in range(2):
+        try:
+            return urllib.request.urlopen(req, timeout=timeout)  # noqa: S310
+        except urllib.error.HTTPError:
+            raise
+        except urllib.error.URLError as exc:
+            print(f"  ..  network error before the request was sent ({exc.reason}), retrying")
+            time.sleep(2)
+    return urllib.request.urlopen(req, timeout=timeout)  # noqa: S310
+
+
 def call(method: str, path: str, body=None, timeout: int = 90, headers=None):
     """Returns (status, headers, parsed_or_text). Never raises on HTTP errors."""
     data = json.dumps(body).encode() if body is not None else None
@@ -46,10 +66,13 @@ def call(method: str, path: str, body=None, timeout: int = 90, headers=None):
         req.add_header(name, value)
 
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            status, response_headers, raw = r.status, dict(r.headers), r.read()
+        with open_url(req, timeout) as r:
+            # The message object, not a dict of it: header names are
+            # case-insensitive, and Azure's ingress lower-cases the ones it
+            # doesn't recognise (deprecation:, sunset:).
+            status, response_headers, raw = r.status, r.headers, r.read()
     except urllib.error.HTTPError as e:
-        status, response_headers, raw = e.code, dict(e.headers), e.read()
+        status, response_headers, raw = e.code, e.headers, e.read()
 
     text = raw.decode("utf-8", "replace")
     try:
@@ -72,7 +95,7 @@ def expect_status(name: str, method: str, path: str, want, body=None) -> tuple:
     return status, headers, payload
 
 
-def is_problem(status: int, headers: dict, payload) -> bool:
+def is_problem(status: int, headers, payload) -> bool:
     """An RFC 9457 Problem Details response, consistent with its own status."""
     return (headers.get("Content-Type", "").startswith(PROBLEM_TYPE)
             and isinstance(payload, dict)
@@ -182,7 +205,7 @@ if isinstance(payload, dict):
 def encoding_of(path: str) -> tuple:
     req = urllib.request.Request(BASE + path)
     req.add_header("Accept-Encoding", "gzip")
-    with urllib.request.urlopen(req, timeout=30) as r:
+    with open_url(req, 30) as r:
         return r.headers.get("Content-Encoding", "identity"), len(r.read())
 
 
@@ -403,15 +426,23 @@ section("Rate limiting")
 
 # Sized from whatever the server reports rather than assuming the defaults —
 # otherwise this fails spuriously against a deployment that raised the limit.
-limit = (HEALTH.get("limits", {}) or {}).get("requests_per_window", 60) if isinstance(HEALTH, dict) else 60
+# Each worker process counts separately, so the real ceiling is the limit
+# times the number of workers: 60 x 2 on Azure. A burst of only limit + 15
+# passed in Docker, where one worker happened to take nearly every
+# connection, and failed on Azure, whose ingress spreads them evenly.
+limits = (HEALTH.get("limits", {}) or {}) if isinstance(HEALTH, dict) else {}
+limit = limits.get("requests_per_window", 60)
+workers = limits.get("worker_processes", 1)
+ceiling = limit * workers
 
-if limit > 500:
-    print(f"  SKIP  limiter is configured at {limit}/window — too high to test cheaply")
+if ceiling > 500:
+    print(f"  SKIP  limiter allows {ceiling}/window — too high to test cheaply")
 else:
-    burst = limit + 15
+    burst = ceiling + 15
     responses = [call("GET", f"{V1}/airports?codes=KJFK") for _ in range(burst)]
     refused = [(status, headers, payload) for status, headers, payload in responses if status == 429]
-    check(f"burst of {burst} requests (limit {limit}) gets throttled", bool(refused),
+    check(f"burst of {burst} requests (limit {limit} x {workers} worker processes) gets throttled",
+          bool(refused),
           f"{len(refused)} refused" if refused else "no 429 at all — the limiter may be disabled")
     if refused:
         status, headers, payload = refused[0]

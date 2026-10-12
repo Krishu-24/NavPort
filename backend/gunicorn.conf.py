@@ -36,6 +36,12 @@ worker_class = "gthread"
 workers = _int("WEB_CONCURRENCY", min(2, multiprocessing.cpu_count()) or 1)
 threads = _int("NAVPORT_THREADS", 8)
 
+# The rate limiter counts in each worker process separately (see
+# navport/security.py), so a client can make `workers` times the configured
+# limit before every worker refuses it. Handed to the app so /api/v1/health
+# publishes the real number instead of one that is only true per process.
+os.environ["NAVPORT_WORKERS"] = str(workers)
+
 # Fork after importing the app, so the 34,000-entry airport database is parsed
 # once and then shared with every worker through copy-on-write instead of
 # being decompressed and allocated per worker.
