@@ -341,7 +341,8 @@ body.is-offline .topbar {
    -------------------------------------------------------------------------- */
 
 /* Offering the desktop app from inside the desktop app is just noise. */
-html.is-native .rail__download {
+html.is-native .rail__download,
+html.is-native .rail__get {
     display: none;
 }
 

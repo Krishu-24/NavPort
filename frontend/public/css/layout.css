@@ -91,6 +91,22 @@
     row-gap: var(--s1);
 }
 
+/* A row of its own above the status line. */
+.rail__get {
+    flex-basis: 100%;
+    margin-bottom: var(--s2);
+    text-decoration: none;
+}
+
+.rail__get svg {
+    width: 16px;
+    height: 16px;
+}
+
+.rail__get[hidden] {
+    display: none;
+}
+
 .rail__links {
     margin-left: auto;
     display: flex;

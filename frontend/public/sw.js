@@ -24,7 +24,7 @@
  *       quietly re-serving the last briefing as though it were current.
  */
 
-const VERSION = 'navport-v2.2.0';
+const VERSION = 'navport-v2.3.0';
 const SHELL_CACHE = `${VERSION}-shell`;
 
 const OFFLINE_URL = '/offline.html';
@@ -59,6 +59,7 @@ const SHELL_ASSETS = [
     '/js/ui/toast.js',
     '/js/ui/offline.js',
     '/js/ui/board.js',
+    '/js/ui/download.js',
     '/js/views/overview.js',
     '/js/views/risk.js',
     '/js/views/ribbon.js',

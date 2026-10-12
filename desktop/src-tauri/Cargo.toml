@@ -1,6 +1,6 @@
 [package]
 name = "navport"
-version = "2.0.0"
+version = "2.0.1"
 description = "Aviation weather intelligence and route risk briefing"
 authors = ["NavPort"]
 edition = "2021"

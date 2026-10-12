@@ -13,6 +13,7 @@ import { initTheme } from './ui/theme.js';
 import { initRecent, remember } from './ui/recent.js';
 import { toast } from './ui/toast.js';
 import { initConnection } from './ui/offline.js';
+import { initDownload } from './ui/download.js';
 
 import { renderOverview } from './views/overview.js';
 import { renderBriefing, renderRisk } from './views/risk.js';
@@ -138,6 +139,7 @@ function boot() {
 
     initTheme();
     initConnection();
+    initDownload();
     startClock();
     rail = initRail();
     initTimeline();

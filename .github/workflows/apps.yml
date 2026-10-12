@@ -115,6 +115,9 @@ jobs:
           args: ${{ matrix.args }}
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: 'NavPort ${{ github.ref_name }}'
+          # No version in the file names (NavPort_x64-setup.exe), so the
+          # dashboard's /releases/latest/download/<file> links never go stale.
+          releaseAssetNamePattern: '[name]_[arch][setup][ext]'
           releaseBody: |
             Desktop apps for NavPort: the same dashboard as the website, in its own window, talking to the same API.
 

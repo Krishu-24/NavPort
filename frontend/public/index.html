@@ -129,6 +129,11 @@
         <section class="recent" id="recent" hidden></section>
 
         <footer class="rail__foot">
+            <!-- Shown, and pointed at the right installer, by js/ui/download.js. -->
+            <a class="btn btn--full rail__get" id="get-app" href="https://github.com/Krishu-24/NavPort/releases/latest" hidden>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.5v9m0 0-3.5-3.5M10 12.5l3.5-3.5M4.5 16h11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>Download the desktop app</span>
+            </a>
             <span class="dot dot--ok" aria-hidden="true"></span>
             <span>Live data · aviationweather.gov</span>
             <span class="rail__links">
@@ -136,7 +141,7 @@
                 <!-- Installers are attached to GitHub Releases by .github/workflows/apps.yml.
                      Hidden inside the desktop app itself (platform.css). -->
                 <a class="rail__download" href="https://github.com/Krishu-24/NavPort/releases/latest"
-                   target="_blank" rel="noopener">Desktop app</a>
+                   target="_blank" rel="noopener">All downloads</a>
             </span>
         </footer>
     </aside>
