@@ -61,7 +61,6 @@ jobs:
           # deliberately — so the upload is the folder as-is.
           app_location: frontend/public
           skip_app_build: true
-          skip_api_build: true
 
       - name: Test the live site
         # The same test CI runs locally, now against production: headers,
