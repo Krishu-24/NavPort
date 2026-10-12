@@ -158,7 +158,15 @@ configuring.
 
 ## Release builds
 
-A release build **embeds `frontend/public/` into the binary**. The page is then
+**Without a toolchain:** GitHub → Actions → **Build apps** → **Run workflow**
+builds the Windows, macOS and Linux installers on GitHub's runners and offers
+them as downloadable artifacts. Pushing a tag such as `v2.0.0` does the same
+and attaches them to a draft GitHub Release. Either way the API address comes
+from the repository variable `API_BASE_URL`, the one the dashboard's deploy
+uses, so the apps and the website always talk to the same API. Tick *mobile*
+on a manual run to add Android and iOS.
+
+**Locally:** a release build **embeds `frontend/public/` into the binary**. The page is then
 served from `tauri://localhost`, where there is no API at all. So the build has
 to be told where the API lives:
 

@@ -22,9 +22,11 @@
 /// NAVPORT_API_BASE=https://navport.azurecontainerapps.io npm run build
 /// ```
 ///
-/// Left unset, the frontend falls back to same-origin, which is what `tauri
-/// dev` wants: there the webview loads from the Flask dev server and relative
-/// paths already work.
+/// The release workflow (.github/workflows/apps.yml) sets it from the
+/// repository's API_BASE_URL variable. Left unset, the page's own
+/// `js/api-config.js` default applies — port 8000 on the page's host — which
+/// is what `tauri dev` wants: there the webview loads the dashboard from
+/// `scripts/dev.py` on localhost:8080, with the API beside it on 8000.
 const API_BASE: Option<&str> = option_env!("NAVPORT_API_BASE");
 
 /// JavaScript to run before the page's own scripts.

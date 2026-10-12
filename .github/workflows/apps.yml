@@ -4,14 +4,26 @@ name: Build apps
 # iOS are reachable at all: those can only be built on macOS, and GitHub's
 # macOS runners are free for public repositories — which is the normal way to
 # ship Apple targets without owning a Mac.
+#
+#   Run workflow (Actions tab)   desktop installers as downloadable artifacts
+#   push a tag like v2.0.0       the same, attached to a draft GitHub Release
+#
+# The API address baked into the apps is the repository variable API_BASE_URL
+# — the same one the Frontend workflow gives the dashboard — unless the run
+# overrides it.
 
 on:
   workflow_dispatch:
     inputs:
       api_base:
-        description: 'API origin to bake into the builds (e.g. https://navport.azurecontainerapps.io)'
-        required: true
+        description: 'API origin to bake in. Empty = the API_BASE_URL repository variable'
+        required: false
         type: string
+      mobile:
+        description: 'Also build Android and iOS (slower; the APK is unsigned)'
+        required: false
+        type: boolean
+        default: false
   push:
     tags: ['v*']
 
@@ -41,8 +53,23 @@ jobs:
             label: Linux
             args: ''
 
+    env:
+      # Baked in at compile time — see desktop/src-tauri/src/lib.rs.
+      NAVPORT_API_BASE: ${{ inputs.api_base || vars.API_BASE_URL }}
+
     steps:
       - uses: actions/checkout@v5
+
+      - name: Check the API address is set
+        # Without it the app builds fine and then can't reach anything — the
+        # failure would only show up after someone installed it.
+        shell: bash
+        run: |
+          if [ -z "$NAVPORT_API_BASE" ]; then
+            echo "::error::No API address. Set the API_BASE_URL repository variable, or pass api_base."
+            exit 1
+          fi
+          echo "Baking in $NAVPORT_API_BASE"
 
       - name: Linux system dependencies
         if: matrix.os == 'ubuntu-22.04'
@@ -83,10 +110,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Baked in at compile time — see desktop/src-tauri/src/lib.rs. A tag
-          # build falls back to the repository variable so a release doesn't
-          # need the input.
-          NAVPORT_API_BASE: ${{ inputs.api_base || vars.NAVPORT_API_BASE }}
         with:
           projectPath: desktop
           args: ${{ matrix.args }}
@@ -111,6 +134,8 @@ jobs:
   android:
     name: Android
     runs-on: ubuntu-latest
+    # Opt-in: the desktop installers are what the project ships.
+    if: inputs.mobile
     steps:
       - uses: actions/checkout@v5
 
@@ -154,15 +179,15 @@ jobs:
         working-directory: desktop
         env:
           NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
-          NAVPORT_API_BASE: ${{ inputs.api_base || vars.NAVPORT_API_BASE }}
+          NAVPORT_API_BASE: ${{ inputs.api_base || vars.API_BASE_URL }}
         run: |
           npm run android:init
           npm run android:apk
 
       # Unsigned on purpose. Signing here would mean putting a release
       # keystore into repository secrets; for a student project it is safer to
-      # sign locally. The APK below installs on a device with "unknown
-      # sources" enabled, which is enough to demo it.
+      # sign locally. Android refuses to install an unsigned APK, so sign it
+      # (apksigner, with a key of your own) before putting it on a device.
       - name: Upload the APK
         uses: actions/upload-artifact@v5
         with:
@@ -174,6 +199,7 @@ jobs:
   ios:
     name: iOS (simulator)
     runs-on: macos-latest
+    if: inputs.mobile
     steps:
       - uses: actions/checkout@v5
 
@@ -209,7 +235,7 @@ jobs:
       - name: Generate and build the iOS project
         working-directory: desktop
         env:
-          NAVPORT_API_BASE: ${{ inputs.api_base || vars.NAVPORT_API_BASE }}
+          NAVPORT_API_BASE: ${{ inputs.api_base || vars.API_BASE_URL }}
         run: |
           npm run ios:init
           npm run tauri -- ios build --target aarch64-apple-ios-sim || {
