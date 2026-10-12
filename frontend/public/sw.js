@@ -7,13 +7,17 @@
  *
  * The caching strategy is split deliberately:
  *
- *   App shell (HTML, CSS, JS, fonts,   cache-first
- *   icons, Leaflet, Chart.js)
- *       Versioned and immutable between deploys, so serving it from disk is
- *       both correct and the reason a cold start is instant. Since the
- *       libraries and fonts are vendored under /vendor/ they are part of the
- *       shell rather than a separate third-party tier — there is no CDN left
- *       to revalidate against.
+ *   Vendored libraries, fonts, icons   cache-first
+ *   (/vendor/, /assets/)
+ *       They only change when their filename does, so serving them from disk
+ *       is both correct and the reason a cold start is instant. Since they
+ *       are vendored there is no CDN left to revalidate against.
+ *
+ *   The app's own HTML, CSS and JS     network-first, cache when offline
+ *       These change with every deploy, and must change together: new HTML
+ *       running last deploy's JavaScript is a broken page, not a stale one.
+ *       Online, they always come fresh; offline, the cached copy opens the
+ *       app.
  *
  *   /api/* — weather                   NETWORK ONLY. Never cached.
  *       This is the important one. A stale METAR is not a degraded feature,
@@ -24,7 +28,7 @@
  *       quietly re-serving the last briefing as though it were current.
  */
 
-const VERSION = 'navport-v2.3.0';
+const VERSION = 'navport-v2.4.0';
 const SHELL_CACHE = `${VERSION}-shell`;
 
 const OFFLINE_URL = '/offline.html';
@@ -166,7 +170,7 @@ self.addEventListener('fetch', (event) => {
         event.respondWith(
             IMMUTABLE.test(url.pathname)
                 ? cacheFirst(request, SHELL_CACHE)
-                : staleWhileRevalidate(event, SHELL_CACHE),
+                : networkFirst(request, SHELL_CACHE),
         );
     }
 });
@@ -199,32 +203,29 @@ async function handleNavigation(request) {
 }
 
 /**
- * Serve the cached copy at once, then refresh it in the background so the next
- * load is current.
+ * The network's copy when there is one; the cached copy when there isn't.
  *
- * Cache-first was applied to every same-origin GET, not just the immutable
- * ones. Because the fetch handler caches whatever it fetches, a stylesheet was
- * stored the first time it was requested and then served from disk forever —
- * on every device that had ever opened the app. Editing the CSS and seeing
- * absolutely nothing change was that rule working exactly as written. Weather
- * is untouched by this: /api/ still never reaches the cache at all.
+ * This used to be stale-while-revalidate: serve the cached file at once and
+ * refresh it in the background. Navigations are network-first, though, so the
+ * first visit after a deploy got the new index.html together with the old
+ * main.js from the cache — and a page whose markup and script disagree. The
+ * download button added in 2.0.1 stayed hidden on that visit, because the
+ * cached script had never heard of it. Fetching code the same way as the page
+ * keeps them from the same deploy. Weather is untouched by this: /api/ still
+ * never reaches the cache at all.
  */
-async function staleWhileRevalidate(event, cacheName) {
+async function networkFirst(request, cacheName) {
     const cache = await caches.open(cacheName);
-    const cached = await cache.match(event.request);
-
-    const update = fetch(event.request)
-        .then((response) => {
-            if (response.ok) cache.put(event.request, response.clone());
+    try {
+        const response = await fetchWithTimeout(request, 4000);
+        if (response && response.ok) {
+            cache.put(request, response.clone());
             return response;
-        })
-        .catch(() => null);
-
-    // Without this the worker can be shut down the moment the cached response
-    // is returned, cancelling the refresh and making the staleness permanent.
-    event.waitUntil(update);
-
-    return cached || (await update) || Response.error();
+        }
+        throw new Error(`HTTP ${response && response.status}`);
+    } catch {
+        return (await cache.match(request)) || Response.error();
+    }
 }
 
 async function cacheFirst(request, cacheName) {
