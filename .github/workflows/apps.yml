@@ -6,7 +6,8 @@ name: Build apps
 # ship Apple targets without owning a Mac.
 #
 #   Run workflow (Actions tab)   desktop installers as downloadable artifacts
-#   push a tag like v2.0.0       the same, attached to a draft GitHub Release
+#   push a tag like v2.0.2       the same, then one draft GitHub Release with
+#                                every installer under a fixed name
 #
 # The API address baked into the apps is the repository variable API_BASE_URL
 # — the same one the Frontend workflow gives the dashboard — unless the run
@@ -28,7 +29,7 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write     # needed to attach artefacts to a release
+  contents: read      # only the release job below writes, and asks for it itself
 
 jobs:
   desktop:
@@ -107,47 +108,85 @@ jobs:
         run: npm run icons
 
       - name: Build
+        # Build only. Publishing is the release job's, so that a release is
+        # made once, from every platform's installers, under names it chooses.
         uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: desktop
           args: ${{ matrix.args }}
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          releaseName: 'NavPort ${{ github.ref_name }}'
-          # No version in the file names (NavPort_x64-setup.exe), so the
-          # dashboard's /releases/latest/download/<file> links never go stale.
-          releaseAssetNamePattern: '[name]_[arch][setup][ext]'
-          releaseBody: |
-            Desktop apps for NavPort: the same dashboard as the website, in its own window, talking to the same API.
-
-            | Platform | Download |
-            |---|---|
-            | Windows 10/11 | `NavPort_…_x64-setup.exe` (or the `.msi`) |
-            | macOS, Apple Silicon | `NavPort_…_aarch64.dmg` |
-            | macOS, Intel | `NavPort_…_x64.dmg` |
-            | Linux | `.AppImage` (any distro) or `.deb` (Debian/Ubuntu) |
-
-            These builds aren't code-signed (a signing certificate costs money), so the first launch shows a warning:
-            - **Windows** — "Windows protected your PC": click **More info → Run anyway**.
-            - **macOS** — "cannot be opened": right-click the app → **Open** → **Open**.
-
-            Built by GitHub Actions from this tag's source (`.github/workflows/apps.yml`).
-          releaseDraft: true
-          prerelease: false
 
       - name: Upload artefacts
         uses: actions/upload-artifact@v5
         with:
           name: navport-${{ matrix.label }}
           retention-days: 14
-          if-no-files-found: warn
+          if-no-files-found: error
           path: |
             desktop/src-tauri/target/**/release/bundle/msi/*.msi
             desktop/src-tauri/target/**/release/bundle/nsis/*.exe
             desktop/src-tauri/target/**/release/bundle/dmg/*.dmg
             desktop/src-tauri/target/**/release/bundle/deb/*.deb
+            desktop/src-tauri/target/**/release/bundle/rpm/*.rpm
             desktop/src-tauri/target/**/release/bundle/appimage/*.AppImage
+
+  release:
+    name: Draft the GitHub Release
+    # Only for a version tag, and only once every platform has built: a
+    # release with some installers missing is worse than none.
+    if: github.ref_type == 'tag'
+    needs: desktop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v5        # for .github/release-notes.md
+
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: navport-*
+          path: dist
+
+      - name: Give the installers fixed names
+        # Tauri puts the version in every file name. These names have none,
+        # so /releases/latest/download/NavPort_x64-setup.exe always means the
+        # newest Windows installer, and the dashboard's download button
+        # (frontend/public/js/ui/download.js) never needs updating. Change a
+        # name here and it must change there too.
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir out
+          take() {  # take <artifact> <file pattern> <published name>
+            mapfile -t found < <(find "dist/$1" -type f -name "$2")
+            if [ "${#found[@]}" -ne 1 ]; then
+              echo "::error::expected exactly one $2 in $1, found ${#found[@]}"
+              exit 1
+            fi
+            cp "${found[0]}" "out/$3"
+            echo "$3  <-  ${found[0]#dist/}"
+          }
+          take "navport-Windows"               '*-setup.exe' NavPort_x64-setup.exe
+          take "navport-Windows"               '*.msi'       NavPort_x64.msi
+          take "navport-macOS (Apple Silicon)" '*.dmg'       NavPort_aarch64.dmg
+          take "navport-macOS (Intel)"         '*.dmg'       NavPort_x64.dmg
+          take "navport-Linux"                 '*.AppImage'  NavPort_amd64.AppImage
+          take "navport-Linux"                 '*.deb'       NavPort_amd64.deb
+          take "navport-Linux"                 '*.rpm'       NavPort_x86_64.rpm
+          # So anyone can check a download arrived intact.
+          (cd out && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+      - name: Create the draft release
+        # A draft: nobody sees it until it's published from the Releases page.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" out/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft --verify-tag \
+            --title "NavPort $TAG" \
+            --notes-file .github/release-notes.md
 
   android:
     name: Android

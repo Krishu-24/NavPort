@@ -1,7 +1,7 @@
 {
   "name": "navport-shell",
   "private": true,
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Native app shells for NavPort — Windows, macOS, Linux, Android and iOS from one codebase",
   "type": "module",
   "scripts": {
