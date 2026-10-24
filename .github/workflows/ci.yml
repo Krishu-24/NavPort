@@ -66,6 +66,15 @@ jobs:
       - name: Static Web Apps config is valid JSON
         run: python -m json.tool frontend/public/staticwebapp.config.json > /dev/null
 
+      - name: Infrastructure as code compiles cleanly
+        # Compiles infra/main.bicep to an ARM template and fails on any
+        # warning, so a broken IaC change is caught before anyone deploys it.
+        # Needs no Azure login: compiling is offline.
+        run: |
+          az bicep install
+          az bicep build --file infra/main.bicep --stdout > /dev/null 2> bicep.log || { cat bicep.log; exit 1; }
+          if grep -q "Warning\|Error" bicep.log; then cat bicep.log; exit 1; fi
+
       - name: Risk scoring
         # Pure logic, no server and no network, so it runs with the linters.
         run: python backend/tests/test_risk.py
