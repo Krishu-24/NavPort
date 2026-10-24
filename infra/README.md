@@ -4,8 +4,8 @@
 
 | Resource | Type | Notes |
 |---|---|---|
-| `navport-env` | Container Apps environment | Consumption plan, no log storage |
-| `navport` | Container App | the API image from Docker Hub, 0.25 vCPU / 0.5 GiB, scales 0–2, 60 s cooldown |
+| `navport-env` | Container Apps environment | express mode, no log storage |
+| `navport` | Container App | the API image from Docker Hub, 0.25 vCPU / 0.5 GiB, scales 0–2 |
 | `navport-web` | Static Web App | Free plan; content uploaded by the Frontend workflow |
 | `navport_budget` | Cost budget | ₹10 a month, email at 50% actual and 90% forecast |
 
@@ -56,8 +56,21 @@ new addresses, and add the new Static Web App's deployment token as the
 ## Why these sizes
 
 Measured on Azure (12–23 October 2026): at most ~260 MB of memory and 0.05 vCPU.
-This Azure for Students subscription is billed for Container Apps from the first
-second of activity — the monthly free grant does not apply to it — and every
-request keeps a replica up for the cooldown period. A 60-second cooldown instead
-of the default 300, at the smallest size, cuts the cost of each wake-up by
-roughly ten times.
+The cost data showed Container Apps charges from 1 October, so the monthly free
+grant did not cover this Azure for Students subscription, and every request
+wakes a replica that is billed while it runs. 0.25 vCPU / 0.5 GiB, the
+smallest size, halves the per-second rate.
+
+## Express mode
+
+In October 2026 Azure automatically migrated `navport-env` to Container Apps
+**express**, a fully managed tier for HTTP apps. Express manages scale-down
+itself and ignores `scale.cooldownPeriod`, and the app, created before the
+migration, has reported its provisioning state as `Failed` since, although
+updates still roll out and it serves normally. Recreating the app in the same
+environment clears that and keeps the same address:
+
+```powershell
+az containerapp delete -n navport -g rg-navport --yes
+# then the Deploy command above
+```

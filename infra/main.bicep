@@ -1,6 +1,6 @@
 // NavPort on Azure — the whole of resource group rg-navport, as code.
 //
-//   navport-env    Container Apps environment (Consumption, no log storage)
+//   navport-env    Container Apps environment, express mode, no log storage
 //   navport        Container App running the API image from Docker Hub
 //   navport-web    Static Web App serving the dashboard (Free)
 //   navport_budget monthly cost budget with email alerts
@@ -40,16 +40,15 @@ param corsOrigin string
 
 // Sized from what the API actually uses on Azure: at most ~260 MB of memory
 // and 0.05 vCPU. 0.25 vCPU / 0.5 GiB is the smallest Container Apps size and
-// halves the per-second rate of 0.5 / 1.0.
+// halves the per-second rate of 0.5 / 1.0. How long an idle replica lingers
+// is not configurable here: express manages scale-down itself and ignores
+// scale.cooldownPeriod.
 @allowed([ '0.25', '0.5', '1.0' ])
 param cpu string = '0.25'
 param memory string = '0.5Gi'
 
 param minReplicas int = 0
 param maxReplicas int = 2
-
-@description('Seconds a replica stays up after the last request. Every one of them is billed, so short.')
-param cooldownSeconds int = 60
 
 @description('Monthly budget in the subscription currency (INR).')
 param budgetAmount int = 10
@@ -65,21 +64,25 @@ param repositoryUrl string = 'https://github.com/Krishu-24/NavPort'
 
 // ---------------------------------------------------------------- API
 
-resource environment 'Microsoft.App/managedEnvironments@2025-01-01' = {
+resource environment 'Microsoft.App/managedEnvironments@2026-07-01' = {
   name: environmentName
   location: location
   properties: {
+    // Express: Azure's fully managed tier for HTTP apps, with fast scale from
+    // zero. Azure migrated this environment to it automatically in October
+    // 2026. The settings below are the ones express reports for it; stated so
+    // a deployment changes nothing it doesn't mean to.
+    environmentMode: 'Express'
     // No Log Analytics workspace: logs are streamed live
     // (az containerapp logs show --follow) and never stored or billed.
     appLogsConfiguration: {}
+    publicNetworkAccess: 'Enabled'
     workloadProfiles: [
       {
         name: 'Consumption'
         workloadProfileType: 'Consumption'
       }
     ]
-    zoneRedundant: false
-    // Off, as Azure defaults them; stated so a deployment never flips them.
     peerAuthentication: {
       mtls: {
         enabled: false
@@ -95,7 +98,7 @@ resource environment 'Microsoft.App/managedEnvironments@2025-01-01' = {
 
 var registrySecretName = 'dockerio-${toLower(dockerHubUser)}'
 
-resource api 'Microsoft.App/containerApps@2025-01-01' = {
+resource api 'Microsoft.App/containerApps@2026-07-01' = {
   name: apiAppName
   location: location
   properties: {
@@ -143,7 +146,6 @@ resource api 'Microsoft.App/containerApps@2025-01-01' = {
       scale: {
         minReplicas: minReplicas
         maxReplicas: maxReplicas
-        cooldownPeriod: cooldownSeconds
         rules: [
           {
             name: 'http-scaler'
