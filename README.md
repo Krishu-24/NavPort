@@ -73,16 +73,17 @@ Two containers start:
 The backend runs in production mode, so the dashboard reaches it only because
 `docker-compose.yml` names the dashboard's origin in `NAVPORT_CORS_ORIGINS` —
 the same setting the Azure deployment needs. The backend is capped at
-0.5 CPU / 1 GB, the size of a free Azure Container Apps replica, so an
+0.25 CPU / 512 MB, the size of the Azure Container Apps replica, so an
 out-of-memory problem shows up here rather than in the cloud.
 
 ## Documentation Hub
 
 | Doc | What's in it |
 |---|---|
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Start here for hosting.** Docker Hub, Azure Container Apps, Azure Static Web Apps, GitHub Actions, and why it all costs nothing |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Start here for hosting.** Docker Hub, Azure Container Apps, Azure Static Web Apps, GitHub Actions, Bicep, and what it costs |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Request flow, the two services and how they talk, module map, design rationale |
 | [docs/SECURITY.md](docs/SECURITY.md) | Issues found while hardening, what fixed them, known limitations |
+| [infra/README.md](infra/README.md) | The Azure setup as code (Bicep): preview, deploy, recreate |
 | [desktop/README.md](desktop/README.md) | Optional: Tauri installers that call the hosted API |
 | This README | Running it, features, the API, layout |
 
@@ -184,6 +185,7 @@ NavPort/
 │   ├── build_icons.py             # Generate every icon size from icon.png
 │   ├── build_airport_db.py        # Rebuild the bundled airport database
 │   └── check_tauri_config.py      # Validate tauri.conf.json against the v2 schema
+├── infra/                         # main.bicep · main.bicepparam — every Azure resource as code
 ├── docker-compose.yml             # Both containers, production settings
 ├── run.bat / run.command          # One-click launchers
 ├── pyproject.toml                 # Ruff config
@@ -248,7 +250,8 @@ packaged apps open without a network. Light and dark themes driven entirely by
 CSS custom properties.
 
 **Hosting:** Azure Container Apps (API), Azure Static Web Apps (dashboard),
-Docker Hub (the API's image), GitHub Actions (CI/CD).
+Docker Hub (the API's image), GitHub Actions (CI/CD), Bicep (infrastructure as
+code), Azure Cost Management (budget alert).
 
 **Data:** [Aviation Weather Center](https://aviationweather.gov) public API for
 weather; [OurAirports](https://ourairports.com/data/) (public domain) for the

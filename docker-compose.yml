@@ -45,13 +45,13 @@ services:
     cap_drop:
       - ALL
 
-    # Mirrors one Azure Container Apps replica (0.5 vCPU / 1 GiB). An image that
+    # Mirrors one Azure Container Apps replica (0.25 vCPU / 0.5 GiB). An image that
     # only works with unlimited memory locally would be OOM-killed up there.
     deploy:
       resources:
         limits:
-          cpus: "0.5"
-          memory: 1G
+          cpus: "0.25"
+          memory: 512M
 
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/api/v1/health"]
