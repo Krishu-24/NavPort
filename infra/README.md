@@ -7,7 +7,7 @@
 | `navport-env` | Container Apps environment | express mode, no log storage |
 | `navport` | Container App | the API image from Docker Hub, 0.25 vCPU / 0.5 GiB, scales 0–2 |
 | `navport-web` | Static Web App | Free plan; content uploaded by the Frontend workflow |
-| `navport_budget` | Cost budget | ₹10 a month, email at 50% actual and 90% forecast |
+| `navport_budget` | Cost budget | ₹50 a month (normal is about ₹15), email at 50% and 100% actual and 100% forecast |
 
 `main.bicepparam` holds the public values. Two private values are passed at
 deploy time and never committed: the read-only Docker Hub token and the email

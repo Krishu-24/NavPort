@@ -102,7 +102,7 @@ What it creates:
 | Container Apps environment `navport-env` | express mode, no log storage | No Log Analytics workspace to pay for; `az containerapp logs show --follow` still streams live logs |
 | Container app `navport` | 0.25 vCPU, 0.5 GiB, 0–2 replicas, HTTP scaler at 10 concurrent requests, external HTTPS on port 8000 | Smallest size; measured peak was ~260 MB and 0.05 vCPU |
 | Static Web App `navport-web` | Free plan | Global hosting, HTTPS, security headers from `staticwebapp.config.json` |
-| Budget `navport_budget` | ₹10 a month, email at 50% actual and 90% forecast | Catches any unexpected spend within days |
+| Budget `navport_budget` | ₹50 a month, email at 50% and 100% actual and 100% forecast | A normal month is about ₹15, so ₹25 already means something unusual; catches it within days |
 
 ### Container Apps express
 

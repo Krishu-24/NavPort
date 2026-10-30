@@ -50,11 +50,13 @@ param memory string = '0.5Gi'
 param minReplicas int = 0
 param maxReplicas int = 2
 
-@description('Monthly budget in the subscription currency (INR).')
-param budgetAmount int = 10
+@description('Monthly budget in the subscription currency (INR). Normal running cost is about INR 15.')
+param budgetAmount int = 50
 
-@description('Who gets the budget alerts. Passed at deploy time, not committed.')
+@description('Who gets the budget alerts, comma-separated. Passed at deploy time, not committed.')
 param alertEmail string
+
+var alertEmails = map(split(alertEmail, ','), e => trim(e))
 
 @description('First day of the month the budget starts counting from.')
 param budgetStartDate string = '2026-09-01T00:00:00Z'
@@ -195,19 +197,27 @@ resource budget 'Microsoft.Consumption/budgets@2023-11-01' = {
       startDate: budgetStartDate
       endDate: budgetEndDate
     }
+    // Half the budget is already more than a normal month, so the first alert
+    // means something is waking the API far more than usual.
     notifications: {
       actual_GreaterThan_50_Percent: {
         enabled: true
         operator: 'GreaterThan'
         threshold: 50
-        contactEmails: [ alertEmail ]
+        contactEmails: alertEmails
       }
-      forecasted_GreaterThan_90_Percent: {
+      actual_GreaterThan_100_Percent: {
         enabled: true
         operator: 'GreaterThan'
-        threshold: 90
+        threshold: 100
+        contactEmails: alertEmails
+      }
+      forecasted_GreaterThan_100_Percent: {
+        enabled: true
+        operator: 'GreaterThan'
+        threshold: 100
         thresholdType: 'Forecasted'
-        contactEmails: [ alertEmail ]
+        contactEmails: alertEmails
       }
     }
   }
