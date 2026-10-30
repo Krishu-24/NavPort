@@ -67,6 +67,13 @@ def csp_directive(csp: str, name: str) -> list[str]:
     return []
 
 
+def strip_non_loading(html: str) -> str:
+    """Drop the markup that names URLs without loading them: links the user
+    follows, <meta> tags, the canonical link and JSON-LD data blocks."""
+    html = re.sub(r'<script\b[^>]*type="application/ld\+json"[^>]*>.*?</script>', "", html, flags=re.S)
+    return re.sub(r'<a\b[^>]*>|<meta\b[^>]*>|<link\b[^>]*rel="canonical"[^>]*>', "", html)
+
+
 # --------------------------------------------------------------------------
 section("The page")
 
@@ -102,6 +109,18 @@ check("  learns the API's address before asking it for the description", 0 <= co
       f"api-config at {config_at}, docs.js at {docs_js_at}")
 check("  has the dashboard's Content-Security-Policy",
       header(docs_headers, "Content-Security-Policy") == header(index_headers, "Content-Security-Policy"))
+
+# --------------------------------------------------------------------------
+section("Search engines")
+
+status, _, robots = call("/robots.txt")
+check("GET  /robots.txt -> 200", status == 200, f"got {status}")
+check("  allows crawling and names the sitemap",
+      "Disallow: /\n" not in str(robots) and "Sitemap: https://" in str(robots))
+status, _, sitemap = call("/sitemap.xml")
+check("GET  /sitemap.xml -> 200", status == 200, f"got {status}")
+check("  lists the dashboard", "<loc>https://" in str(sitemap))
+check("  the page has a canonical address", 'rel="canonical"' in str(index))
 
 # --------------------------------------------------------------------------
 section("Installable-app plumbing")
@@ -197,8 +216,9 @@ origins = set()
 for source in ("js/views/map.js", "index.html", "js/core/api.js"):
     _, _, body = call("/" + source)
     # A link (<a href>) is somewhere the user goes, not something the page
-    # loads, and the CSP rightly says nothing about it.
-    loaded = re.sub(r"<a\b[^>]*>", "", str(body))
+    # loads, and the CSP rightly says nothing about it. Nor do the tags for
+    # search engines: <meta>, the canonical link and the JSON-LD data block.
+    loaded = strip_non_loading(str(body))
     for match in re.finditer(r"https://([A-Za-z0-9.-]+\.[A-Za-z]{2,})", loaded):
         host = match.group(1)
         if not host.endswith(("w3.org", "schema.org", "tauri.app")):
@@ -215,7 +235,7 @@ for host in sorted(origins):
 for name, page in (("index.html", index), ("docs/index.html", docs)):
     # Only what the page *loads*: <script src> and <link href>. An ordinary
     # <a href> to another site (the desktop downloads) loads nothing.
-    external = re.findall(r'<(?:script|link)\b[^>]*\b(?:src|href)="(https?://[^"]+)"', str(page))
+    external = re.findall(r'<(?:script|link)\b[^>]*\b(?:src|href)="(https?://[^"]+)"', strip_non_loading(str(page)))
     check(f"{name} loads no third-party scripts or styles", not external, f"found: {external[:3]}")
 for directive in ("script-src", "font-src"):
     ok = csp_directive(csp, directive) == ["'self'"]

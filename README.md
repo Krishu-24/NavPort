@@ -5,6 +5,9 @@ and NavPort pulls live METARs, TAFs, PIREPs, SIGMETs, G-AIRMETs and CWAs
 along the flight path, builds a 15-minute interval timeline, and produces a
 plain-English briefing with an automated risk assessment.
 
+**Live:** [NavPort flight weather dashboard](https://happy-grass-01991ca00.6.azurestaticapps.net/)
+· [API reference](https://happy-grass-01991ca00.6.azurestaticapps.net/docs/)
+
 NavPort is two services:
 
 - **the API** (`backend/`) — a Flask REST API that gathers and analyses the

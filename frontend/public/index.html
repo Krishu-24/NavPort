@@ -6,8 +6,37 @@
          indicator; the safe-area insets in layout.css then pad the content
          back out of them. Without it, iOS letterboxes the whole page. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="description" content="NavPort — aviation weather intelligence and route risk briefing.">
-    <title>NavPort · Flight Weather Intelligence</title>
+    <meta name="description" content="NavPort is a free flight weather briefing dashboard. Enter a route and it reads every METAR, TAF, PIREP, SIGMET and G-AIRMET along the path, builds a 15-minute timeline and scores the risk in plain English.">
+    <title>NavPort · Flight Weather Briefing and Route Risk</title>
+
+    <!-- ══ Search engines and link previews ═════════════════════════ -->
+    <!-- One address for search engines to index, and what a shared link
+         shows. None of these load anything; site_test.py ignores them when
+         it checks the page loads no third-party resources. -->
+    <link rel="canonical" href="https://happy-grass-01991ca00.6.azurestaticapps.net/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="NavPort">
+    <meta property="og:title" content="NavPort · Flight Weather Briefing and Route Risk">
+    <meta property="og:description" content="Live METARs, TAFs, PIREPs and SIGMETs along your flight path, a 15-minute timeline and an automated risk assessment.">
+    <meta property="og:url" content="https://happy-grass-01991ca00.6.azurestaticapps.net/">
+    <meta property="og:image" content="https://happy-grass-01991ca00.6.azurestaticapps.net/assets/icons/icon-512.png">
+    <meta name="twitter:card" content="summary">
+    <!-- Structured data: tells Google the site's name is "NavPort". A data
+         block, never executed, so the CSP's ban on inline script is intact. -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "NavPort",
+        "alternateName": "NavPort Flight Weather",
+        "url": "https://happy-grass-01991ca00.6.azurestaticapps.net/",
+        "applicationCategory": "TravelApplication",
+        "operatingSystem": "Web, Windows, macOS, Linux",
+        "description": "Flight weather briefing dashboard: METARs, TAFs, PIREPs and SIGMETs along a route, with an automated risk assessment.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "sameAs": ["https://github.com/Krishu-24/NavPort"]
+    }
+    </script>
 
     <!-- ══ Installable app ══════════════════════════════════════════ -->
     <link rel="manifest" href="/manifest.webmanifest">

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://happy-grass-01991ca00.6.azurestaticapps.net/sitemap.xml
