@@ -48,6 +48,16 @@ def _stable_hash(text: str) -> str:
         return hashlib.md5(text.encode()).hexdigest()  # noqa: S324
 
 
+def _bbox(south: float, west: float, north: float, east: float) -> str:
+    """The `bbox` parameter for aviationweather.gov, in its south,west,north,east order.
+
+    Rounded to four decimals (about 11 m). The API began answering a
+    full-precision float such as -77.07389573239303 with a 400 (first seen
+    2 November 2026), so an unrounded box quietly returned no METARs.
+    """
+    return ','.join(f'{v:.4f}' for v in (south, west, north, east))
+
+
 class WeatherProcessor:
     """Process and categorize aviation weather data with NOTAM support."""
 
@@ -365,7 +375,7 @@ class WeatherProcessor:
                 lons.extend([segment['from_coords']['lon'], segment['to_coords']['lon']])
 
             buffer = 2.0
-            bbox = f"{min(lats)-buffer},{min(lons)-buffer},{max(lats)+buffer},{max(lons)+buffer}"
+            bbox = _bbox(min(lats) - buffer, min(lons) - buffer, max(lats) + buffer, max(lons) + buffer)
 
         if not bbox:
             bbox = "25,-125,50,-65"
@@ -689,7 +699,7 @@ class WeatherProcessor:
         # Pad the bounding box so the circle fits inside it.
         d_lat = radius_nm / 60.0
         d_lon = radius_nm / max(1e-6, 60.0 * math.cos(math.radians(lat)))
-        bbox = f"{lat - d_lat},{lon - d_lon},{lat + d_lat},{lon + d_lon}"
+        bbox = _bbox(lat - d_lat, lon - d_lon, lat + d_lat, lon + d_lon)
 
         # This call lands right behind the briefing's 7-way concurrent burst, so
         # upstream sometimes throttles it to an empty body. One short retry turns
